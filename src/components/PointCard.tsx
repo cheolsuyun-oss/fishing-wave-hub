@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { type FishingPoint, RISK_META } from "@/lib/points";
 import { getVillageForecast } from "@/lib/forecast.functions";
+import { getMulddae } from "@/lib/moonAge";
 
 const DIRS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
 function degToCompass(deg: number) {
@@ -47,6 +48,7 @@ export function PointCard({
     ? `${fcst?.vec != null ? degToCompass(fcst.vec) + " " : ""}${fcst.wsd}m/s`
     : `${point.windSpeed}m/s`;
   const waveText = fcst?.wav != null ? `${fcst.wav}m` : `${point.waveHeight}m`;
+  const tideText = getMulddae();
 
   return (
     <div className="relative">
@@ -76,7 +78,7 @@ export function PointCard({
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={windText} />
             <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={waveText} />
-            <Metric icon={<Moon className="w-4 h-4" />} label="물때" value={point.tide} />
+            <Metric icon={<Moon className="w-4 h-4" />} label="물때" value={tideText} />
           </div>
 
           <div className="mt-3 flex items-center justify-end text-xs text-primary font-medium">
