@@ -20,6 +20,7 @@ import { getCustomPointsSync, useCustomPoints } from "@/lib/custom-points-store"
 import { getPointDetail } from "@/lib/point-detail-data";
 import { getTidePredict, type TideEvent } from "@/lib/tide.functions";
 import { getVillageForecast } from "@/lib/forecast.functions";
+import { saveUltraShortForecast } from "@/lib/ultra-short-forecast";
 import type { TideEventProp } from "@/components/detail/TideChart";
 
 const TideChart = lazy(() => import("@/components/detail/TideChart"));
@@ -107,6 +108,13 @@ function PointDetail() {
   });
 
   const fetchFcst = useServerFn(getVillageForecast);
+  const fetchUltraShort = useServerFn(saveUltraShortForecast);
+  useQuery({
+  queryKey: ["ultraShort", point.id, point.nx, point.ny],
+  queryFn: () => fetchUltraShort({ data: { pointId: point.id, nx: point.nx, ny: point.ny } }),
+  staleTime: 60 * 60 * 1000, // 1시간마다 저장
+  refetchOnWindowFocus: false,
+});
   const { data: fcst } = useQuery({
     queryKey: ["fcst", point.nx, point.ny],
     queryFn: () => fetchFcst({ data: { nx: point.nx, ny: point.ny } }),
