@@ -60,7 +60,7 @@ export const getTidePredict = createServerFn({ method: "GET" })
       fetchedAt: now,
     };
 
-    const apiKey = process.env.KMA_API_KEY;
+    const apiKey = process.env.KMA_API_KEY ?? process.env.VITE_KMA_API_KEY;
     if (!apiKey) {
       cache.set(key, { at: now, data: empty });
       return empty;

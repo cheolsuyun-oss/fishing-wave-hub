@@ -61,7 +61,7 @@ export function latLngToGrid(lat: number, lng: number): { nx: number; ny: number
 // 조석 관측소 (기존 하드코딩 포인트들에서 추출)
 const TIDE_STATIONS: { code: string; lat: number; lng: number; sea: FishingPoint["sea"] }[] = [
   { code: "DT_0060", lat: 37.5486, lng: 129.1169, sea: "동해" }, // 묵호
-  { code: "DT_0009", lat: 36.3297, lng: 126.4867, sea: "서해" }, // 대천
+  { code: "DT_0025", lat: 36.3297, lng: 126.4867, sea: "서해" }, // 대천
   { code: "DT_0027", lat: 34.8544, lng: 128.4337, sea: "남해" }, // 통영
 ];
 

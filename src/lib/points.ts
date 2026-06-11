@@ -43,7 +43,7 @@ export const POINTS: FishingPoint[] = [
     tide: "5물",
     nx: 54,
     ny: 100,
-    tideStationCode: "DT_0009",
+    tideStationCode: "DT_0025",
     lat: 36.3297,
     lng: 126.4867,
   },
