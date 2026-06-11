@@ -166,10 +166,14 @@ function PointDetail() {
             </span>
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
-            <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s" />
-            <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m" />
-            <Metric icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%" />
-            <Metric icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°" />
+            <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s"
+              level={windValue <= 5.6 ? "safe" : windValue <= 10 ? "caution" : "danger"} />
+            <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m"
+              level={waveValue <= 0.5 ? "safe" : waveValue <= 1.4 ? "caution" : "danger"} />
+            <Metric icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%"
+              level={firstRain <= 30 ? "safe" : firstRain <= 60 ? "caution" : "danger"} />
+            <Metric icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°"
+              level={firstTemp >= 15 && firstTemp <= 25 ? "safe" : firstTemp >= 5 && firstTemp <= 30 ? "caution" : "danger"} />
           </div>
           <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg bg-red-50 px-3 py-2">
@@ -305,14 +309,21 @@ function Metric({
   label,
   value,
   unit,
+  level,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   unit: string;
+  level?: "safe" | "caution" | "danger";
 }) {
+  const bg =
+    level === "danger" ? "bg-red-100 border-red-300" :
+    level === "caution" ? "bg-yellow-100 border-yellow-300" :
+    level === "safe" ? "bg-sky-100 border-sky-300" :
+    "bg-muted border-border";
   return (
-    <div className="rounded-xl bg-muted border border-border py-2.5">
+    <div className={`rounded-xl border py-2.5 ${bg}`}>
       <div className="flex items-center justify-center text-primary mb-1">{icon}</div>
       <div className="text-[10px] text-muted-foreground">{label}</div>
       <div className="text-sm font-bold text-foreground mt-0.5">
