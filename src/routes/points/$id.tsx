@@ -200,7 +200,7 @@ function PointDetail() {
               )}
               {tideRange && (
                 <span>
-                  일교차{" "}
+                  조수차{" "}
                   <span className="font-semibold text-foreground">
                     {(tideRange / 100).toFixed(2)}m
                   </span>
