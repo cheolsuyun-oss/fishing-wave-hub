@@ -72,6 +72,49 @@ function computeRange(events: TideEvent[]): number | null {
   return Math.max(...levels) - Math.min(...levels);
 }
 
+function getRiskSummaryMessage(
+  windLevel: "safe" | "caution" | "danger",
+  waveLevel: "safe" | "caution" | "danger",
+  rainLevel: "safe" | "caution" | "danger",
+  tempLevel: "safe" | "caution" | "danger"
+): string {
+  const items = [
+    { label: "풍속", level: windLevel },
+    { label: "파고", level: waveLevel },
+    { label: "강수", level: rainLevel },
+    { label: "기온", level: tempLevel },
+  ];
+
+  const dangers = items.filter((i) => i.level === "danger").map((i) => i.label);
+  const cautions = items.filter((i) => i.level === "caution").map((i) => i.label);
+
+  if (dangers.length > 0) {
+    const dangerText = dangers.join(", ");
+    const cautionSuffix = cautions.length > 0 ? ` (${cautions.join(", ")}도 주의)` : "";
+    return `${dangerText} 때문에 낚시가 불가능한 날씨입니다. 오늘은 안전하게 쉬어가는 게 좋겠습니다.${cautionSuffix}`;
+  }
+
+  if (cautions.length > 0) {
+    return `${cautions.join(", ")}에 주의가 필요한 날씨입니다. 오늘 출조를 하신다면, 철저하게 준비상황을 다시 점검해 주세요.`;
+  }
+
+  return "낚시하기에 좋은 날씨입니다.";
+}
+
+function getOverallLevel(
+  windLevel: "safe" | "caution" | "danger",
+  waveLevel: "safe" | "caution" | "danger",
+  rainLevel: "safe" | "caution" | "danger",
+  tempLevel: "safe" | "caution" | "danger"
+): "safe" | "caution" | "danger" {
+  const levels = [windLevel, waveLevel, rainLevel, tempLevel];
+  if (levels.includes("danger")) return "danger";
+  if (levels.includes("caution")) return "caution";
+  return "safe";
+}
+
+
+
 function PointDetail() {
   const { id, point: ssrPoint } = Route.useLoaderData() as {
     id: string;
@@ -120,6 +163,17 @@ function PointDetail() {
 
   const windValue = fcst?.wsd != null ? fcst.wsd : point.windSpeed;
   const waveValue = fcst?.wav != null ? fcst.wav : point.waveHeight;
+  const windLevel = windValue <= 5.6 ? "safe" : windValue <= 10 ? "caution" : "danger";
+  const waveLevel = waveValue <= 0.5 ? "safe" : waveValue <= 1.4 ? "caution" : "danger";
+  const rainLevel = firstRain <= 30 ? "safe" : firstRain <= 60 ? "caution" : "danger";
+  const tempLevel = (firstTemp >= 15 && firstTemp <= 25) ? "safe" : (firstTemp >= 5 && firstTemp <= 30) ? "caution" : "danger";
+const riskMessage = getRiskSummaryMessage(windLevel, waveLevel, rainLevel, tempLevel);
+const overallLevel = getOverallLevel(windLevel, waveLevel, rainLevel, tempLevel);
+const overallLabel = overallLevel === "danger" ? "불가" : overallLevel === "caution" ? "주의" : "가능";
+const overallColorClass =
+  overallLevel === "danger" ? "text-red-600" :
+  overallLevel === "caution" ? "text-yellow-600" :
+  "text-sky-600";
 
   const apiHighs: TideEventProp[] = tide?.events.filter((e) => e.type === "high") ?? [];
   const apiLows: TideEventProp[] = tide?.events.filter((e) => e.type === "low") ?? [];
@@ -150,12 +204,6 @@ function PointDetail() {
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <h1 className="text-lg font-bold flex-1 truncate">{point.name}</h1>
-          <Badge
-            variant="outline"
-            className={`${risk.className} font-semibold px-2.5 py-0.5`}
-          >
-            {risk.label}
-          </Badge>
         </div>
 
         {/* Section 1 - Today summary */}
@@ -164,20 +212,21 @@ function PointDetail() {
             <h2 className="text-sm font-bold">오늘 요약</h2>
             <span className="text-xs text-muted-foreground">
               종합 위험도{" "}
-              <span className={`font-semibold ${risk.className.split(" ")[1] ?? ""}`}>
-                {risk.label}
+              <span className={`font-semibold ${overallColorClass}`}>
+                {overallLabel}
               </span>
             </span>
           </div>
+          <p className="text-xs text-muted-foreground mb-3">{riskMessage}</p>
           <div className="grid grid-cols-4 gap-2 text-center">
             <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s"
-              level={windValue <= 5.6 ? "safe" : windValue <= 10 ? "caution" : "danger"} />
+              level={windLevel} />
             <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m"
-              level={waveValue <= 0.5 ? "safe" : waveValue <= 1.4 ? "caution" : "danger"} />
+              level={waveLevel} />
             <Metric icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%"
-              level={firstRain <= 30 ? "safe" : firstRain <= 60 ? "caution" : "danger"} />
+              level={rainLevel} />
             <Metric icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°"
-              level={firstTemp >= 15 && firstTemp <= 25 ? "safe" : firstTemp >= 5 && firstTemp <= 30 ? "caution" : "danger"} />
+              level={tempLevel} />
           </div>
           <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg bg-red-50 px-3 py-2">
