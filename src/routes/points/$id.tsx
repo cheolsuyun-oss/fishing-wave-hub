@@ -1,7 +1,6 @@
 import { lazy, Suspense } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import {
   ChevronLeft,
   Wind,
@@ -99,25 +98,22 @@ function PointDetail() {
   const firstRain = detail.rain[0]?.value ?? 0;
   const firstTemp = detail.temp[Math.floor(detail.temp.length / 2)]?.value ?? 0;
 
-  const fetchTide = useServerFn(getTidePredict);
   const { data: tide, isLoading: tideLoading } = useQuery({
     queryKey: ["tide", point.tideStationCode],
-    queryFn: () => fetchTide({ data: { stationCode: point.tideStationCode } }),
+    queryFn: () => getTidePredict({ stationCode: point.tideStationCode }),
     staleTime: 6 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const fetchFcst = useServerFn(getVillageForecast);
-  const fetchUltraShort = useServerFn(saveUltraShortForecast);
-  useQuery({
+ useQuery({
   queryKey: ["ultraShort", point.id, point.nx, point.ny],
-  queryFn: () => fetchUltraShort({ data: { pointId: point.id, nx: point.nx, ny: point.ny } }),
-  staleTime: 60 * 60 * 1000, // 1시간마다 저장
+  queryFn: () => saveUltraShortForecast({ pointId: point.id, nx: point.nx, ny: point.ny }),
+  staleTime: 60 * 60 * 1000,
   refetchOnWindowFocus: false,
 });
   const { data: fcst } = useQuery({
     queryKey: ["fcst", point.nx, point.ny],
-    queryFn: () => fetchFcst({ data: { nx: point.nx, ny: point.ny } }),
+    queryFn: () => getVillageForecast({ nx: point.nx, ny: point.ny }),
     staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

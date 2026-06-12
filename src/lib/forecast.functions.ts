@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+
 
 export type VillageForecast = {
   nx: number;
@@ -51,15 +51,13 @@ function currentKstHHMM(): string {
   return `${String(nowKst.getUTCHours()).padStart(2, "0")}00`;
 }
 
-export const getVillageForecast = createServerFn({ method: "GET" })
-  .inputValidator((data: { nx: number; ny: number }) => data)
-  .handler(async ({ data }): Promise<VillageForecast> => {
+export async function getVillageForecast(data: { nx: number; ny: number }): Promise<VillageForecast> {
     const now = Date.now();
     const key = `${data.nx},${data.ny}`;
     const hit = cache.get(key);
     if (hit && now - hit.at < TTL_MS) return hit.data;
 
-    const apiKey = process.env.KMA_API_KEY;
+    const apiKey = import.meta.env.VITE_KMA_API_KEY;
     const empty: VillageForecast = {
       nx: data.nx,
       ny: data.ny,
@@ -143,4 +141,4 @@ export const getVillageForecast = createServerFn({ method: "GET" })
       cache.set(key, { at: now - (TTL_MS - 60_000), data: empty });
       return empty;
     }
-  });
+}

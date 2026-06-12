@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+
 
 export type TideEvent = {
   time: string; // "HH:MM"
@@ -44,9 +44,7 @@ function classifyHL(extrSe?: string): "high" | "low" | null {
   return null;
 }
 
-export const getTidePredict = createServerFn({ method: "GET" })
-  .inputValidator((data: { stationCode: string; date?: string }) => data)
-  .handler(async ({ data }): Promise<TidePredict> => {
+export async function getTidePredict(data: { stationCode: string; date?: string }): Promise<TidePredict> {
     const date = data.date ?? kstDateYYYYMMDD();
     const key = `${data.stationCode}:${date}`;
     const now = Date.now();
@@ -60,7 +58,7 @@ export const getTidePredict = createServerFn({ method: "GET" })
       fetchedAt: now,
     };
 
-    const apiKey = process.env.KMA_API_KEY ?? process.env.VITE_KMA_API_KEY;
+    const apiKey = import.meta.env.VITE_KMA_API_KEY;
     if (!apiKey) {
       cache.set(key, { at: now, data: empty });
       return empty;
@@ -121,4 +119,4 @@ const body = (root?.body ?? (root?.response as Record<string, unknown> | undefin
       cache.set(key, { at: now, data: empty });
       return empty;
     }
-  });
+}
