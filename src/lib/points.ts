@@ -1,10 +1,10 @@
-﻿export type RiskLevel = "safe" | "caution" | "danger";
+export type RiskLevel = "safe" | "caution" | "danger";
 
 export interface FishingPoint {
   id: string;
   name: string;
   region: string;
-  sea: "동해" | "서해" | "남해";
+  sea: "동해" | "서해" | "남해" | "제주";
   risk: RiskLevel;
   windSpeed: number;
   waveHeight: number;
@@ -58,7 +58,7 @@ export const POINTS: FishingPoint[] = [
     tide: "4물",
     nx: 97,
     ny: 66,
-    tideStationCode: "DT_0027",
+    tideStationCode: "DT_0014",
     lat: 34.8544,
     lng: 128.4337,
   },

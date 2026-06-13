@@ -1,0 +1,130 @@
+[
+  {
+    "code": "DT_0003",
+    "name": "영광",
+    "attempt": 1,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 35.42611,
+    "lng": 126.42055,
+    "apiName": "영광"
+  },
+  {
+    "code": "DT_0020",
+    "name": "울산",
+    "attempt": 1,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 35.50194,
+    "lng": 129.38722,
+    "apiName": "울산"
+  },
+  {
+    "code": "DT_0024",
+    "name": "장항",
+    "attempt": 3,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 36.00694,
+    "lng": 126.6875,
+    "apiName": "장항"
+  },
+  {
+    "code": "DT_0040",
+    "name": "독도",
+    "attempt": 4,
+    "resultCode": "FAILED_AFTER_RETRY",
+    "lat": null,
+    "lng": null
+  },
+  {
+    "code": "DT_0050",
+    "name": "태안",
+    "attempt": 1,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 36.91305,
+    "lng": 126.23888,
+    "apiName": "태안"
+  },
+  {
+    "code": "DT_0059",
+    "name": "백령도",
+    "attempt": 1,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 37.95565,
+    "lng": 124.73608,
+    "apiName": "백령도"
+  },
+  {
+    "code": "DT_0062",
+    "name": "마산",
+    "attempt": 1,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 35.1975,
+    "lng": 128.57638,
+    "apiName": "마산"
+  },
+  {
+    "code": "DT_0065",
+    "name": "덕적도",
+    "attempt": 2,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 37.22633,
+    "lng": 126.15655,
+    "apiName": "덕적도"
+  },
+  {
+    "code": "DT_0092",
+    "name": "여호항",
+    "attempt": 3,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.66194,
+    "lng": 127.46916,
+    "apiName": "여호항"
+  },
+  {
+    "code": "SO_0761",
+    "name": "녹동항",
+    "attempt": 1,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.52702,
+    "lng": 127.13452,
+    "apiName": "녹동항"
+  },
+  {
+    "code": "SO_1250",
+    "name": "평도",
+    "attempt": 2,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.24583,
+    "lng": 127.4475,
+    "apiName": "평도"
+  },
+  {
+    "code": "SO_1282",
+    "name": "선재도",
+    "attempt": 1,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 37.25331,
+    "lng": 126.50966,
+    "apiName": "선재도"
+  },
+  {
+    "code": "SO_1284",
+    "name": "월포리",
+    "attempt": 2,
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 36.20941,
+    "lng": 129.381,
+    "apiName": "월포리"
+  }
+]

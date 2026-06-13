@@ -1,4 +1,5 @@
 import type { FishingPoint } from "./points";
+import tideStationsMaster from "../data/tide-stations-master.json";
 
 // Haversine distance in meters
 export function haversine(
@@ -58,12 +59,10 @@ export function latLngToGrid(lat: number, lng: number): { nx: number; ny: number
   return { nx, ny };
 }
 
-// 조석 관측소 (기존 하드코딩 포인트들에서 추출)
-const TIDE_STATIONS: { code: string; lat: number; lng: number; sea: FishingPoint["sea"] }[] = [
-  { code: "DT_0060", lat: 37.5486, lng: 129.1169, sea: "동해" }, // 묵호
-  { code: "DT_0025", lat: 36.3297, lng: 126.4867, sea: "서해" }, // 대천
-  { code: "DT_0027", lat: 34.8544, lng: 128.4337, sea: "남해" }, // 통영
-];
+// 조석 관측소 (기상청 조석예보(고저조) 오픈API 활용가이드 기준, 172개)
+type TideStation = { code: string; name: string; lat: number; lng: number; sea: FishingPoint["sea"] };
+
+const TIDE_STATIONS: TideStation[] = tideStationsMaster as TideStation[];
 
 export function nearestTideStation(lat: number, lng: number) {
   let best = TIDE_STATIONS[0];
@@ -78,8 +77,10 @@ export function nearestTideStation(lat: number, lng: number) {
   return best;
 }
 
-// 좌표 기반 해역 추정
+// 좌표 기반 해역 추정 (제주권 포함 4분류)
 export function inferSea(lat: number, lng: number): FishingPoint["sea"] {
+  // 제주 본섬 및 인근 도서 (대략 위도 33~34.3, 경도 126.0~127.0 권역 + 이어도)
+  if (lat < 34.3 && lng < 127.0 && lng > 124.5) return "제주";
   if (lng < 127.3) return "서해";
   if (lng > 128.7 && lat > 35.5) return "동해";
   return "남해";

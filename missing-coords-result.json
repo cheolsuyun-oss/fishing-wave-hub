@@ -1,0 +1,299 @@
+[
+  {
+    "code": "DT_0003",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "영광"
+  },
+  {
+    "code": "DT_0020",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "울산"
+  },
+  {
+    "code": "DT_0024",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "장항"
+  },
+  {
+    "code": "DT_0040",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "독도"
+  },
+  {
+    "code": "DT_0047",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 33.15805,
+    "lng": 126.27472,
+    "apiName": "도농탄",
+    "name": "도농탄"
+  },
+  {
+    "code": "DT_0050",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "태안"
+  },
+  {
+    "code": "DT_0054",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 35.14722,
+    "lng": 128.64305,
+    "apiName": "진해",
+    "name": "진해"
+  },
+  {
+    "code": "DT_0059",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "백령도"
+  },
+  {
+    "code": "DT_0062",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "마산"
+  },
+  {
+    "code": "DT_0065",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "덕적도"
+  },
+  {
+    "code": "DT_0092",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "여호항"
+  },
+  {
+    "code": "SO_0537",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.53944,
+    "lng": 126.34611,
+    "apiName": "벽파진",
+    "name": "벽파진"
+  },
+  {
+    "code": "SO_0540",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 37.17611,
+    "lng": 129.34277,
+    "apiName": "호산항",
+    "name": "호산항"
+  },
+  {
+    "code": "SO_0569",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.95777,
+    "lng": 128.32166,
+    "apiName": "남포항",
+    "name": "남포항"
+  },
+  {
+    "code": "SO_0578",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.62194,
+    "lng": 128.54805,
+    "apiName": "소매물도",
+    "name": "소매물도"
+  },
+  {
+    "code": "SO_0703",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.29888,
+    "lng": 126.53111,
+    "apiName": "땅끝항",
+    "name": "땅끝항"
+  },
+  {
+    "code": "SO_0706",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.18083,
+    "lng": 126.85611,
+    "apiName": "청산도",
+    "name": "청산도"
+  },
+  {
+    "code": "SO_0707",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.39444,
+    "lng": 127.26166,
+    "apiName": "시산항",
+    "name": "시산항"
+  },
+  {
+    "code": "SO_0739",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.3673,
+    "lng": 127.01197,
+    "apiName": "도장항",
+    "name": "도장항"
+  },
+  {
+    "code": "SO_0740",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.129,
+    "lng": 126.51355,
+    "apiName": "보옥항",
+    "name": "보옥항"
+  },
+  {
+    "code": "SO_0754",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.44805,
+    "lng": 126.455,
+    "apiName": "평호리",
+    "name": "평호리"
+  },
+  {
+    "code": "SO_0761",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "녹동항"
+  },
+  {
+    "code": "SO_1250",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "평도"
+  },
+  {
+    "code": "SO_1253",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 35.65888,
+    "lng": 126.11055,
+    "apiName": "상왕등도",
+    "name": "상왕등도"
+  },
+  {
+    "code": "SO_1259",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 37.24361,
+    "lng": 126.31861,
+    "apiName": "자월도",
+    "name": "자월도"
+  },
+  {
+    "code": "SO_1267",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 35.99,
+    "lng": 129.55555,
+    "apiName": "구룡포항",
+    "name": "구룡포항"
+  },
+  {
+    "code": "SO_1268",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 37.11722,
+    "lng": 126.68083,
+    "apiName": "궁평항",
+    "name": "궁평항"
+  },
+  {
+    "code": "SO_1273",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 37.28833,
+    "lng": 129.3175,
+    "apiName": "장호항",
+    "name": "장호항"
+  },
+  {
+    "code": "SO_1274",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 38.44666,
+    "lng": 128.45666,
+    "apiName": "거진항",
+    "name": "거진항"
+  },
+  {
+    "code": "SO_1275",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 38.355,
+    "lng": 128.51305,
+    "apiName": "공현진항",
+    "name": "공현진항"
+  },
+  {
+    "code": "SO_1279",
+    "resultCode": "00",
+    "resultMsg": "NORMAL_SERVICE",
+    "lat": 34.34841,
+    "lng": 126.47516,
+    "apiName": "어란진항",
+    "name": "어란진항"
+  },
+  {
+    "code": "SO_1282",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "선재도"
+  },
+  {
+    "code": "SO_1284",
+    "resultCode": "99",
+    "resultMsg": "UNKNOWN_ERROR",
+    "lat": null,
+    "lng": null,
+    "apiName": null,
+    "name": "월포리"
+  }
+]
