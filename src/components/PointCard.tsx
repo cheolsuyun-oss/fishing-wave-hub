@@ -1,6 +1,6 @@
 ﻿import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Wind, Waves, Moon, ChevronRight, X } from "lucide-react";
+import { Wind, Waves, CloudRain, Thermometer, ChevronRight, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -16,11 +16,42 @@ import {
 } from "@/components/ui/alert-dialog";
 import { type FishingPoint, RISK_META } from "@/lib/points";
 import { getVillageForecast } from "@/lib/forecast.functions";
-import { getMulddae } from "@/lib/moonAge";
+import { getTidePredict, type TideEvent } from "@/lib/tide.functions";
+import { getPointDetail } from "@/lib/point-detail-data";
 
-const DIRS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-function degToCompass(deg: number) {
-  return DIRS[Math.round(deg / 22.5) % 16];
+type Level = "safe" | "caution" | "danger";
+
+function tideSummary(events: TideEvent[]): { type: "high" | "low"; time: string; inText: string } | null {
+  if (events.length === 0) return null;
+  const nowKst = new Date(Date.now() + 9 * 3600_000);
+  const nowMin = nowKst.getUTCHours() * 60 + nowKst.getUTCMinutes();
+  const future = events
+    .map((e) => {
+      const [h, m] = e.time.split(":").map(Number);
+      return { e, min: h * 60 + m };
+    })
+    .filter((x) => x.min >= nowMin)
+    .sort((a, b) => a.min - b.min);
+  const next = future[0];
+  if (!next) return null;
+  const diff = next.min - nowMin;
+  const hh = Math.floor(diff / 60);
+  const mm = diff % 60;
+  const inText = hh > 0 ? `${hh}시간 ${mm}분 후` : `${mm}분 후`;
+  return { type: next.e.type, time: next.e.time, inText };
+}
+
+function computeRange(events: TideEvent[]): number | null {
+  if (events.length < 2) return null;
+  const levels = events.map((e) => e.level);
+  return Math.max(...levels) - Math.min(...levels);
+}
+
+function getOverallLevel(windLevel: Level, waveLevel: Level, rainLevel: Level, tempLevel: Level): Level {
+  const levels = [windLevel, waveLevel, rainLevel, tempLevel];
+  if (levels.includes("danger")) return "danger";
+  if (levels.includes("caution")) return "caution";
+  return "safe";
 }
 
 export function PointCard({
@@ -37,15 +68,38 @@ export function PointCard({
     refetchOnWindowFocus: false,
   });
 
-  const wsd = fcst?.wsd ?? point.windSpeed;
-  const wav = fcst?.wav ?? point.waveHeight;
-  const riskLevel = (wsd > 14 || wav > 3.0) ? "danger" : (wsd > 7 || wav > 1.5) ? "caution" : "safe";
-  const risk = RISK_META[riskLevel];
+  const { data: tide, isLoading: tideLoading } = useQuery({
+    queryKey: ["tide", point.tideStationCode],
+    queryFn: () => getTidePredict({ stationCode: point.tideStationCode }),
+    staleTime: 6 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
-  const windText = fcst?.wsd != null
-    ? `${fcst?.vec != null ? degToCompass(fcst.vec) + " " : ""}${fcst.wsd}m/s`
-    : `${point.windSpeed}m/s`;
-  const waveText = fcst?.wav != null ? `${fcst.wav}m` : `${point.waveHeight}m`;
+  const detail = getPointDetail(point.id);
+  const firstRain = detail.rain[0]?.value ?? 0;
+  const firstTemp = detail.temp[Math.floor(detail.temp.length / 2)]?.value ?? 0;
+
+  const windValue = fcst?.wsd != null ? fcst.wsd : point.windSpeed;
+  const waveValue = fcst?.wav != null ? fcst.wav : point.waveHeight;
+
+  const windLevel: Level = windValue <= 5.6 ? "safe" : windValue <= 10 ? "caution" : "danger";
+  const waveLevel: Level = waveValue <= 0.5 ? "safe" : waveValue <= 1.4 ? "caution" : "danger";
+  const rainLevel: Level = firstRain <= 30 ? "safe" : firstRain <= 60 ? "caution" : "danger";
+  const tempLevel: Level =
+    firstTemp >= 15 && firstTemp <= 25 ? "safe" : firstTemp >= 5 && firstTemp <= 30 ? "caution" : "danger";
+
+  const overallLevel = getOverallLevel(windLevel, waveLevel, rainLevel, tempLevel);
+  const risk = RISK_META[overallLevel];
+
+  const apiHighs = tide?.events.filter((e) => e.type === "high") ?? [];
+  const apiLows = tide?.events.filter((e) => e.type === "low") ?? [];
+  const hasApiTide = apiHighs.length + apiLows.length > 0;
+
+  const tideHighs = hasApiTide ? apiHighs : detail.highs.map((h) => ({ time: h.time, level: h.level, type: "high" as const }));
+  const tideLows = hasApiTide ? apiLows : detail.lows.map((l) => ({ time: l.time, level: l.level, type: "low" as const }));
+
+  const nextEvent = tideSummary(tide?.events ?? []);
+  const tideRange = computeRange(tide?.events ?? []);
 
   return (
     <div className="relative">
@@ -72,11 +126,47 @@ export function PointCard({
             </Badge>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={windText} />
-            <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={waveText} />
-            <Metric icon={<Moon className="w-4 h-4" />} label="물때" value={getMulddae()} />
+          <div className="mt-4 grid grid-cols-2 gap-2 text-center">
+            <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s" level={windLevel} />
+            <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m" level={waveLevel} />
+            <Metric icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%" level={rainLevel} />
+            <Metric icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°" level={tempLevel} />
           </div>
+
+          <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg bg-red-50 px-3 py-2">
+              <span className="text-red-700 font-semibold">만조</span>{" "}
+              <span className="text-foreground">
+                {tideLoading ? "…" : (tideHighs[0]?.time ?? "-")}
+              </span>
+            </div>
+            <div className="rounded-lg bg-blue-50 px-3 py-2">
+              <span className="text-blue-700 font-semibold">간조</span>{" "}
+              <span className="text-foreground">
+                {tideLoading ? "…" : (tideLows[0]?.time ?? "-")}
+              </span>
+            </div>
+          </div>
+
+          {(nextEvent || tideRange) && (
+            <div className="mt-2 text-[11px] text-muted-foreground flex items-center justify-between">
+              {nextEvent && (
+                <span>
+                  다음 {nextEvent.type === "high" ? "만조" : "간조"} {nextEvent.time}
+                  {" "}
+                  <span className="text-foreground/70">({nextEvent.inText})</span>
+                </span>
+              )}
+              {tideRange && (
+                <span>
+                  조수차{" "}
+                  <span className="font-semibold text-foreground">
+                    {(tideRange / 100).toFixed(2)}m
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="mt-3 flex items-center justify-end text-xs text-primary font-medium">
             상세보기 <ChevronRight className="w-3.5 h-3.5" />
@@ -119,18 +209,30 @@ function Metric({
   icon,
   label,
   value,
+  unit,
+  level,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  unit: string;
+  level?: Level;
 }) {
+  const bg =
+    level === "danger" ? "bg-red-100 border-red-300" :
+    level === "caution" ? "bg-yellow-100 border-yellow-300" :
+    level === "safe" ? "bg-sky-100 border-sky-300" :
+    "bg-muted border-border";
   return (
-    <div className="rounded-xl bg-muted border border-border py-2.5 px-1">
+    <div className={`rounded-xl border py-2.5 ${bg}`}>
       <div className="flex items-center justify-center text-primary mb-1">
         {icon}
       </div>
       <div className="text-[10px] text-muted-foreground">{label}</div>
-      <div className="text-sm font-semibold text-foreground">{value}</div>
+      <div className="text-sm font-bold text-foreground mt-0.5">
+        {value}
+        <span className="text-[10px] font-medium text-muted-foreground ml-0.5">{unit}</span>
+      </div>
     </div>
   );
 }

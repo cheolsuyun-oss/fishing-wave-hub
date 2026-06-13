@@ -20,6 +20,7 @@ import { useFavoritePoints } from "@/lib/favorites-store";
 import { getWeatherWarning } from "@/lib/kma.functions";
 import { getVillageForecast } from "@/lib/forecast.functions";
 import { formatFcstBasis } from "@/lib/geo";
+import { getMulddae } from "@/lib/moonAge";
 import appIcon from "@/assets/app-icon.png";
 
 export const Route = createFileRoute("/")({
@@ -58,6 +59,7 @@ function Home() {
     refetchOnWindowFocus: false,
   });
   const fcstBasis = formatFcstBasis(fcst?.fcstDate, fcst?.fcstTime);
+  const mulddae = getMulddae();
 
   const handleAdd = () => {
     if (isFull) {
@@ -97,8 +99,12 @@ function Home() {
               {points.length}/{max}곳
             </span>
           </div>
-          {fcstBasis && (
-            <p className="text-[11px] text-muted-foreground/70 mb-2">{fcstBasis}</p>
+          {(fcstBasis || mulddae) && (
+            <p className="text-[11px] text-muted-foreground/70 mb-2">
+              {fcstBasis}
+              {fcstBasis && mulddae && " · "}
+              {mulddae && `${mulddae}`}
+            </p>
           )}
 
           <div className="space-y-3">

@@ -1,5 +1,3 @@
-
-
 export type TideEvent = {
   time: string; // "HH:MM"
   level: number; // cm
@@ -22,6 +20,10 @@ type ApiItem = {
 const TTL_MS = 0;
 const cache = new Map<string, { at: number; data: TidePredict }>();
 
+// 게이트웨이 99 UNKNOWN_ERROR 등 일시적 오류 재시도 설정
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 300;
+
 function kstDateYYYYMMDD(d = new Date()): string {
   const kst = new Date(d.getTime() + 9 * 3600_000);
   const y = kst.getUTCFullYear();
@@ -42,6 +44,45 @@ function classifyHL(extrSe?: string): "high" | "low" | null {
   if (c === "1" || c === "3") return "high"; // 오전/오후 고조
   if (c === "2" || c === "4") return "low";  // 오전/오후 저조
   return null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 단일 API 호출 시도.
+ * - 네트워크 에러나 HTTP 에러 → { ok: false }
+ * - resultCode가 "00"(NORMAL_SERVICE)이 아닌 경우(예: "99 UNKNOWN_ERROR") → { ok: false }
+ *   (data.go.kr 게이트웨이의 일시적 오류로, 재시도하면 대부분 정상 응답됨)
+ * - 정상 응답 → { ok: true, json }
+ */
+async function fetchOnce(url: string): Promise<{ ok: true; json: unknown } | { ok: false }> {
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return { ok: false };
+
+    const json: unknown = await res.json();
+    const root = json as Record<string, unknown> | null;
+    const header = (root?.header ?? (root?.response as Record<string, unknown> | undefined)?.header) as
+      | { resultCode?: string; resultMsg?: string }
+      | undefined;
+
+    // resultCode가 있고 "00"이 아니면 일시적 게이트웨이 오류로 간주 (예: "99 UNKNOWN_ERROR")
+    if (header?.resultCode && header.resultCode !== "00") {
+      console.warn(
+        `[tide] API resultCode=${header.resultCode} (${header.resultMsg ?? ""}) - retrying`,
+      );
+      return { ok: false };
+    }
+
+    return { ok: true, json };
+  } catch (err) {
+    console.warn("[tide] fetch failed:", err);
+    return { ok: false };
+  }
 }
 
 export async function getTidePredict(data: { stationCode: string; date?: string }): Promise<TidePredict> {
@@ -74,19 +115,29 @@ export async function getTidePredict(data: { stationCode: string; date?: string 
     url.searchParams.set("obsCode", data.stationCode);
     url.searchParams.set("reqDate", date);
 
-    try {
-      const res = await fetch(url.toString(), {
-        headers: { Accept: "application/json" },
-      });
-      if (!res.ok) {
-        cache.set(key, { at: now, data: empty });
-        return empty;
-      }
-      const json: unknown = await res.json();
+    let json: unknown | null = null;
 
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const result = await fetchOnce(url.toString());
+      if (result.ok) {
+        json = result.json;
+        break;
+      }
+      if (attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAY_MS);
+      }
+    }
+
+    if (json === null) {
+      // 모든 재시도 실패
+      cache.set(key, { at: now, data: empty });
+      return empty;
+    }
+
+    try {
       const items: ApiItem[] = (() => {
-const root = json as Record<string, unknown> | null;
-const body = (root?.body ?? (root?.response as Record<string, unknown> | undefined)?.body) as Record<string, unknown> | undefined;
+        const root = json as Record<string, unknown> | null;
+        const body = (root?.body ?? (root?.response as Record<string, unknown> | undefined)?.body) as Record<string, unknown> | undefined;
         const itemsWrap = body?.items as
           | { item?: ApiItem | ApiItem[] }
           | undefined;
