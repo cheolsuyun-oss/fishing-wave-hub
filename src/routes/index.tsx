@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useFavoritePoints } from "@/lib/favorites-store";
 import { getWeatherWarning } from "@/lib/kma.functions";
+import { getVillageForecast } from "@/lib/forecast.functions";
+import { formatFcstBasis } from "@/lib/geo";
 import appIcon from "@/assets/app-icon.png";
 
 export const Route = createFileRoute("/")({
@@ -46,6 +48,16 @@ function Home() {
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  const firstPoint = points[0];
+  const { data: fcst } = useQuery({
+    queryKey: ["fcst", firstPoint?.nx, firstPoint?.ny],
+    queryFn: () => getVillageForecast({ nx: firstPoint!.nx, ny: firstPoint!.ny }),
+    enabled: !!firstPoint,
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const fcstBasis = formatFcstBasis(fcst?.fcstDate, fcst?.fcstTime);
 
   const handleAdd = () => {
     if (isFull) {
@@ -77,7 +89,7 @@ function Home() {
         ) : null}
 
         <section className="mt-6">
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex items-baseline justify-between mb-1">
             <h2 className="text-sm font-bold text-foreground">
               즐겨찾기 포인트
             </h2>
@@ -85,6 +97,9 @@ function Home() {
               {points.length}/{max}곳
             </span>
           </div>
+          {fcstBasis && (
+            <p className="text-[11px] text-muted-foreground/70 mb-2">{fcstBasis}</p>
+          )}
 
           <div className="space-y-3">
             {points.map((p) => (

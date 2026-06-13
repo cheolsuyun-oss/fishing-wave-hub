@@ -84,3 +84,14 @@ export function inferSea(lat: number, lng: number): FishingPoint["sea"] {
   if (lng > 128.7 && lat > 35.5) return "동해";
   return "남해";
 }
+
+// "20260613" + "0900" -> "6월 13일 09:00 기준"
+export function formatFcstBasis(fcstDate?: string, fcstTime?: string): string | null {
+  if (!fcstDate || fcstDate.length !== 8 || !fcstTime || fcstTime.length !== 4) return null;
+  const month = Number(fcstDate.slice(4, 6));
+  const day = Number(fcstDate.slice(6, 8));
+  const hh = fcstTime.slice(0, 2);
+  const mm = fcstTime.slice(2, 4);
+  if (!month || !day) return null;
+  return `${month}월 ${day}일 ${hh}:${mm} 기준`;
+}

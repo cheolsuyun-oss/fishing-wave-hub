@@ -89,6 +89,8 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
     url.searchParams.set("ny", String(data.ny));
 
     try {
+      console.log("[KMA DEBUG] url:", url.toString());
+      console.log("[KMA DEBUG] apiKey present:", !!apiKey, "len:", apiKey?.length);
       const res = await fetch(url.toString(), {
         signal: AbortSignal.timeout(8000),
       });
@@ -97,6 +99,8 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
         response?: { body?: { items?: { item?: FcstItem[] } } };
       };
       const items = json.response?.body?.items?.item ?? [];
+      console.log("[KMA DEBUG] resultCode:", json.response?.header?.resultCode, json.response?.header?.resultMsg);
+      console.log("[KMA DEBUG] items length:", items.length);
       if (!items.length) throw new Error("empty items");
 
       // Pick fcstTime closest to current hour (>= current preferred, else nearest)

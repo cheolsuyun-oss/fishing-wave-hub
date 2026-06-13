@@ -1,6 +1,5 @@
 ﻿import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { Wind, Waves, Moon, ChevronRight, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -31,10 +30,9 @@ export function PointCard({
   point: FishingPoint;
   onRemove?: (id: string) => void;
 }) {
-  const fetchFcst = useServerFn(getVillageForecast);
   const { data: fcst } = useQuery({
     queryKey: ["fcst", point.nx, point.ny],
-    queryFn: () => fetchFcst({ data: { nx: point.nx, ny: point.ny } }),
+    queryFn: () => getVillageForecast({ nx: point.nx, ny: point.ny }),
     staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

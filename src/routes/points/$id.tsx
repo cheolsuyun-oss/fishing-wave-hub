@@ -20,6 +20,7 @@ import { getPointDetail } from "@/lib/point-detail-data";
 import { getTidePredict, type TideEvent } from "@/lib/tide.functions";
 import { getVillageForecast } from "@/lib/forecast.functions";
 import { saveUltraShortForecast } from "@/lib/ultra-short-forecast";
+import { formatFcstBasis } from "@/lib/geo";
 import type { TideEventProp } from "@/components/detail/TideChart";
 
 const TideChart = lazy(() => import("@/components/detail/TideChart"));
@@ -113,8 +114,6 @@ function getOverallLevel(
   return "safe";
 }
 
-
-
 function PointDetail() {
   const { id, point: ssrPoint } = Route.useLoaderData() as {
     id: string;
@@ -174,6 +173,7 @@ const overallColorClass =
   overallLevel === "danger" ? "text-red-600" :
   overallLevel === "caution" ? "text-yellow-600" :
   "text-sky-600";
+  const fcstBasis = formatFcstBasis(fcst?.fcstDate, fcst?.fcstTime);
 
   const apiHighs: TideEventProp[] = tide?.events.filter((e) => e.type === "high") ?? [];
   const apiLows: TideEventProp[] = tide?.events.filter((e) => e.type === "low") ?? [];
@@ -208,7 +208,7 @@ const overallColorClass =
 
         {/* Section 1 - Today summary */}
         <Card className="mt-4 p-5 bg-white shadow-md">
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex items-baseline justify-between mb-1">
             <h2 className="text-sm font-bold">오늘 요약</h2>
             <span className="text-xs text-muted-foreground">
               종합 위험도{" "}
@@ -217,6 +217,9 @@ const overallColorClass =
               </span>
             </span>
           </div>
+          {fcstBasis && (
+            <p className="text-[11px] text-muted-foreground/70 mb-2">{fcstBasis}</p>
+          )}
           <p className="text-xs text-muted-foreground mb-3">{riskMessage}</p>
           <div className="grid grid-cols-4 gap-2 text-center">
             <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s"
