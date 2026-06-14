@@ -217,7 +217,7 @@ function PointDetail() {
     <div className="min-h-screen bg-background">
       <TopNav />
       <div className="mx-auto max-w-md px-4 pt-3 pb-12">
-        {/* 뒤로가기 + 포인트명 */}
+        {/* 뒤로가기 + 포인트명 + 지도보기 */}
         <div className="flex items-center gap-2 -ml-2">
           <Link
             to="/"
@@ -227,30 +227,18 @@ function PointDetail() {
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <h1 className="text-lg font-bold flex-1 truncate">{point.name}</h1>
+          <a
+            href={kakaoMapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary shrink-0"
+          >
+            <MapPin className="w-3.5 h-3.5" />
+            지도보기
+          </a>
         </div>
 
-        {/* Section 1 - Point info */}
-        <Card className="mt-4 p-5 bg-white shadow-md">
-          <h2 className="text-sm font-bold mb-3">포인트 정보</h2>
-          <dl className="space-y-2 text-sm">
-            <Row label="포인트명" value={point.name} />
-            <Row label="좌표" value="34.8211° N, 128.5435° E" />
-          </dl>
-          <Button asChild className="w-full mt-4" variant="outline">
-            <a
-              href={kakaoMapUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5"
-            >
-              <MapPin className="w-4 h-4" />
-              카카오맵으로 보기
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </Button>
-        </Card>
-
-        {/* Section 2 - Memo + fishing log */}
+        {/* Section 1 - Memo + fishing log */}
         <Card className="mt-4 p-5 bg-white shadow-md">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-bold">포인트 메모</h2>
@@ -308,14 +296,14 @@ function PointDetail() {
           </div>
         </Card>
 
-        {/* Section 3 - Weather charts */}
+        {/* Section 2 - Weather charts */}
         <div className="mt-4">
           <Suspense fallback={<ChartSkeleton title="기상 예보" />}>
             <WeatherCharts pointId={point.id} />
           </Suspense>
         </div>
 
-        {/* Section 4 - Tide chart */}
+        {/* Section 3 - Tide chart */}
         <div className="mt-4">
           <Suspense fallback={<ChartSkeleton title="물때 / 조수" />}>
             <TideChart
@@ -328,7 +316,7 @@ function PointDetail() {
           </Suspense>
         </div>
 
-        {/* Section 5 - Moon phase + tide */}
+        {/* Section 4 - Moon phase + tide */}
         <Card className="mt-4 p-5 bg-white shadow-md">
           <h2 className="text-sm font-bold mb-3">달 위상 & 조수</h2>
           <div className="flex items-center gap-4">
