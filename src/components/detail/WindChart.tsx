@@ -60,6 +60,47 @@ function nowHour(): number {
   return kst.getUTCHours() + kst.getUTCMinutes() / 60;
 }
 
+function WindPropeller({ speed }: { speed: number }) {
+  const duration =
+    speed <= 0.5 ? 6 :
+    speed <= 2 ? 4 :
+    speed <= 5 ? 2 :
+    speed <= 10 ? 1 :
+    0.4;
+
+  return (
+    <svg
+      width="38"
+      height="38"
+      viewBox="0 0 38 38"
+      style={{ animation: `windSpin ${duration}s linear infinite`, flexShrink: 0 }}
+    >
+      <style>{`@keyframes windSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      {[0, 120, 240].map((deg) => (
+        <g key={deg} transform={`rotate(${deg} 19 19)`}>
+          <path
+            d="M19,19 C16,16 15,10 17,4 C18,1 20,1 21,4 C23,10 22,16 19,19 Z"
+            fill="hsl(48 60% 88%)"
+            stroke="hsl(48 40% 75%)"
+            strokeWidth="0.5"
+          />
+        </g>
+      ))}
+      <circle cx="19" cy="19" r="3.5" fill="hsl(48 50% 80%)" stroke="hsl(48 40% 70%)" strokeWidth="0.8" />
+      <circle cx="19" cy="19" r="1.5" fill="hsl(48 40% 65%)" />
+    </svg>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+      {label}
+    </span>
+  );
+}
+
 export default function WindChart({ pointId }: { pointId: string }) {
   const [range, setRange] = useState<Range>(1);
   const [sunInfo, setSunInfo] = useState<{ sunrise: number; sunset: number } | null>(null);
@@ -76,7 +117,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
     });
   }, [pointId]);
 
-  // range 바뀌면 activeT 현재시각으로 리셋
   useEffect(() => {
     setActiveT(nowHour());
   }, [range]);
@@ -89,7 +129,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   const arrowEvery = range === 1 ? 1 : range === 3 ? 2 : 3;
 
-  // activeT 기준 가장 가까운 데이터 포인트
   const activePoint = data.reduce(
     (best, p) =>
       Math.abs(p.t - activeT) < Math.abs(best.t - activeT) ? p : best,
@@ -103,41 +142,16 @@ export default function WindChart({ pointId }: { pointId: string }) {
     }
   };
 
-  // activeT → 시:분 표시
   const activeHourInt = Math.floor(activeT);
   const activeMin = Math.round((activeT - activeHourInt) * 60);
   const activeTimeStr = `${String(activeHourInt).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
 
   return (
     <Card className="p-4 bg-white shadow-md overflow-hidden">
-      <div className="flex items-start justify-between mb-3 gap-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-bold mb-2">바람</h2>
-          <div className="flex items-end gap-2 flex-wrap">
-            <span className="text-3xl font-bold text-foreground leading-none">
-              {activePoint.speedKmh}
-            </span>
-            <span className="text-sm text-muted-foreground pb-1">km/h</span>
-            <span
-              className="inline-flex items-center gap-1 text-sm font-semibold pb-1"
-              style={{ color: windColor(activePoint.speed) }}
-            >
-              <Navigation
-                className="w-4 h-4"
-                style={{ transform: `rotate(${activePoint.dir + 180}deg)` }}
-                fill="currentColor"
-              />
-              {activePoint.dirLabel}
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            돌풍{" "}
-            <span className="font-semibold text-foreground">{activePoint.gustKmh} km/h</span>
-            <span className="ml-2 text-muted-foreground">{activeTimeStr} 기준</span>
-          </div>
-        </div>
-
-        <div className="flex rounded-full bg-muted p-0.5 text-xs h-fit">
+      {/* 헤더: 제목 + 탭 */}
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm font-bold">바람</h2>
+        <div className="flex rounded-full bg-muted p-0.5 text-xs">
           {([1, 3, 5] as Range[]).map((r) => (
             <button
               key={r}
@@ -153,6 +167,31 @@ export default function WindChart({ pointId }: { pointId: string }) {
           ))}
         </div>
       </div>
+
+      {/* 풍속 + 돌풍 한 줄 */}
+      <div className="flex items-center gap-2 mb-1">
+        <WindPropeller speed={activePoint.speed} />
+        <span className="text-3xl font-bold text-foreground leading-none">
+          {activePoint.speedKmh}
+        </span>
+        <span className="text-sm text-muted-foreground">km/h</span>
+        <span
+          className="inline-flex items-center gap-1 text-sm font-semibold"
+          style={{ color: windColor(activePoint.speed) }}
+        >
+          <Navigation
+            className="w-4 h-4"
+            style={{ transform: `rotate(${activePoint.dir + 180}deg)` }}
+            fill="currentColor"
+          />
+          {activePoint.dirLabel}
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
+          돌풍 <span className="font-semibold text-foreground">{activePoint.gustKmh} km/h</span>
+        </span>
+      </div>
+
+      <div className="mb-3" />
 
       <div className="h-56 w-full -mx-2 touch-pan-y select-none">
         <ResponsiveContainer width="100%" height="100%">
@@ -173,18 +212,65 @@ export default function WindChart({ pointId }: { pointId: string }) {
                 stroke="none"
               />
             ))}
-            {/* 현재시각 고정선 (검정) */}
+            {/* 날짜 레이블 (각 날 12시 위치) */}
+            {Array.from({ length: range }, (_, d) => {
+              const today = new Date(Date.now() + 9 * 3600_000);
+              today.setUTCDate(today.getUTCDate() + d);
+              const label = `${today.getUTCMonth() + 1}월 ${today.getUTCDate()}일`;
+              return (
+                <ReferenceLine
+                  key={`date-${d}`}
+                  x={d * 24 + 12}
+                  stroke="transparent"
+                  label={{
+                    value: label,
+                    position: "insideTop",
+                    fontSize: 10,
+                    fill: "hsl(0 0% 50%)",
+                    dy: -20,
+                  }}
+                />
+              );
+            })}
             <ReferenceLine
               x={currentNow}
               stroke="hsl(0 0% 15%)"
               strokeWidth={1.5}
               strokeDasharray="4 3"
             />
-            {/* 탐색선 (파랑) */}
             <ReferenceLine
               x={activeT}
               stroke="hsl(217 80% 50%)"
               strokeWidth={2}
+              label={(props: { viewBox?: { x?: number; y?: number } }) => {
+                const x = props.viewBox?.x ?? 0;
+                const y = (props.viewBox?.y ?? 0) + 8;
+                const w = 44;
+                const h = 18;
+                return (
+                  <g>
+                    <rect
+                      x={x - w / 2}
+                      y={y}
+                      width={w}
+                      height={h}
+                      rx={9}
+                      ry={9}
+                      fill="hsl(217 80% 50%)"
+                    />
+                    <text
+                      x={x}
+                      y={y + h / 2 + 4}
+                      textAnchor="middle"
+                      fontSize={10}
+                      fontWeight="600"
+                      fill="white"
+                    >
+                      {activeTimeStr}
+                    </text>
+                  </g>
+                );
+              }}
             />
             <XAxis
               dataKey="t"
@@ -256,14 +342,17 @@ export default function WindChart({ pointId }: { pointId: string }) {
         <LegendDot color="hsl(40 95% 50%)" label="≤14m/s" />
         <LegendDot color="hsl(0 75% 52%)" label=">14m/s" />
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded bg-[hsl(45_95%_65%)]/40" />
+          <span className="flex overflow-hidden rounded" style={{ width: "24px", height: "12px" }}>
+            <span className="flex-1" style={{ background: "hsl(45 95% 65% / 0.5)" }} />
+            <span className="flex-1" style={{ background: "hsl(30 90% 60% / 0.5)" }} />
+          </span>
           일출/일몰
         </span>
         <span className="flex items-center gap-1">
           <span className="w-3 h-3 rounded bg-muted-foreground/20 border border-border" />
           야간
         </span>
-        <span className="ml-auto flex items-center gap-4">
+        <span className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <span className="w-4 border-t-2 border-dashed border-foreground/40" />
             현재
@@ -275,14 +364,5 @@ export default function WindChart({ pointId }: { pointId: string }) {
         </span>
       </div>
     </Card>
-  );
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-      {label}
-    </span>
   );
 }
