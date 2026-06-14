@@ -109,15 +109,10 @@ export function PointCard({
         className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
       >
         <Card className="p-4 bg-white shadow-md hover:shadow-lg transition-shadow active:scale-[0.99]">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h3 className="text-base font-semibold text-foreground pr-6">
-                {point.name}
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {point.region}
-              </p>
-            </div>
+          <div className="flex items-baseline justify-between mb-1">
+            <h3 className="text-base font-semibold text-foreground pr-6">
+              {point.name}
+            </h3>
             <Badge
               variant="outline"
               className={`${risk.className} font-semibold px-2.5 py-0.5 mr-7 whitespace-nowrap`}
@@ -125,8 +120,16 @@ export function PointCard({
               {risk.label}
             </Badge>
           </div>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-3">{point.region}</p>
+          <p className="text-xs text-muted-foreground mb-3">{
+            overallLevel === "danger"
+              ? "출조가 불가능한 날씨입니다."
+              : overallLevel === "caution"
+              ? "출조 시 주의가 필요한 날씨입니다."
+              : "낚시하기에 좋은 날씨입니다."
+          }</p>
 
-          <div className="mt-4 grid grid-cols-2 gap-2 text-center">
+          <div className="grid grid-cols-4 gap-2 text-center">
             <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s" level={windLevel} />
             <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m" level={waveLevel} />
             <Metric icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%" level={rainLevel} />
