@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Fish, User, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { User, Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,7 @@ const WEATHER_OPTIONS = [
 ];
 
 const MAX_LOGS = 10;
+const MEMO_MAX = 200;
 
 function FishingLogPage() {
   const navigate = useNavigate();
@@ -54,6 +55,7 @@ function FishingLogPage() {
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("fished_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -94,9 +96,7 @@ function FishingLogPage() {
   const sorted = [...logs].sort((a, b) => {
     const av = a[sortKey] ?? "";
     const bv = b[sortKey] ?? "";
-    return sortDir === "asc"
-      ? av.localeCompare(bv)
-      : bv.localeCompare(av);
+    return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 
   const toggleSort = (key: SortKey) => {
@@ -109,7 +109,7 @@ function FishingLogPage() {
   };
 
   const SortIcon = ({ k }: { k: SortKey }) => {
-    if (sortKey !== k) return <span className="opacity-30">▲▼</span>;
+    if (sortKey !== k) return <span className="opacity-30 text-[10px]">▲▼</span>;
     return sortDir === "asc" ? <ChevronUp className="w-3 h-3 inline" /> : <ChevronDown className="w-3 h-3 inline" />;
   };
 
@@ -207,10 +207,20 @@ function FishingLogPage() {
       </header>
 
       <div className="mx-auto max-w-md px-4 pt-6 pb-12">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <h1 className="text-base font-bold text-foreground">낚시 기록</h1>
           <span className="text-xs text-muted-foreground">{logs.length}/{MAX_LOGS}건</span>
         </div>
+        {logs.length > 0 && (
+          <div className="flex items-center mb-3 text-xs text-muted-foreground px-4">
+            <button type="button" onClick={() => toggleSort("fished_at")} className="flex items-center gap-0.5 hover:text-foreground w-[60px] flex-shrink-0">
+              날짜 <SortIcon k="fished_at" />
+            </button>
+            <button type="button" onClick={() => toggleSort("point_name")} className="flex items-center gap-0.5 hover:text-foreground">
+              포인트 <SortIcon k="point_name" />
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-3">
@@ -223,56 +233,66 @@ function FishingLogPage() {
             아직 등록된 낚시 기록이 없어요.<br />첫 번째 기록을 남겨보세요 🎣
           </div>
         ) : (
-          <Card className="bg-white shadow-md overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/50 border-b border-border">
-                  <tr>
-                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground cursor-pointer whitespace-nowrap" onClick={() => toggleSort("fished_at")}>
-                      등록일 <SortIcon k="fished_at" />
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground cursor-pointer whitespace-nowrap" onClick={() => toggleSort("point_name")}>
-                      포인트 <SortIcon k="point_name" />
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">메모</th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">사진</th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">날씨</th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">조과</th>
-                    <th className="px-3 py-2.5"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {sorted.map((log) => (
-                    <tr key={log.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">{log.fished_at}</td>
-                      <td className="px-3 py-3 font-medium whitespace-nowrap">{log.point_name}</td>
-                      <td className="px-3 py-3 max-w-[100px]">
-                        <span className="line-clamp-2 text-muted-foreground">{log.memo ?? "-"}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        {log.photo_url ? (
-                          <img src={log.photo_url} alt="낚시 사진" className="w-12 h-12 object-cover rounded-lg" />
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
+          <div className="space-y-2">
+            {sorted.map((log) => {
+              const isExpanded = expandedId === log.id;
+              const weather = WEATHER_OPTIONS.find((w) => w.code === log.weather_code);
+              return (
+                <Card key={log.id} className="bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 pt-3 pb-2">
+                    {/* 날짜 + 포인트명 + 삭제 버튼 */}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-[11px] text-muted-foreground flex-shrink-0">{log.fished_at}</span>
+                        <div className="text-sm font-semibold text-foreground truncate">{log.point_name}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteId(log.id)}
+                        className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 ml-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {/* 사진 + 날씨/조과/메모 */}
+                    <div className="flex items-start gap-3">
+                      {log.photo_url ? (
+                        <img src={log.photo_url} alt="낚시 사진" className="w-14 h-14 object-cover rounded-lg flex-shrink-0" />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-[10px] flex-shrink-0">
+                          사진없음
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{weather?.label ?? "—"}</span>
+                          <span className="text-xs text-muted-foreground truncate">{log.catch_info ?? "조과 없음"}</span>
+                        </div>
+                        {log.memo && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                            className="w-full text-left mt-0.5 flex items-center gap-1"
+                          >
+                            <p className="text-xs text-muted-foreground line-clamp-1 flex-1">{log.memo}</p>
+                            <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                          </button>
                         )}
-                      </td>
-                      <td className="px-3 py-3 text-lg">
-                        {WEATHER_OPTIONS.find((w) => w.code === log.weather_code)?.label ?? "-"}
-                      </td>
-                      <td className="px-3 py-3 max-w-[100px]">
-                        <span className="line-clamp-2 text-muted-foreground">{log.catch_info ?? "-"}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <button type="button" onClick={() => setDeleteId(log.id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 확장 영역: 메모 전체 */}
+                  {isExpanded && log.memo && (
+                    <div className="px-4 pb-4 border-t border-border pt-3">
+                      <p className="text-xs font-medium text-foreground mb-1">메모</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">{log.memo}</p>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
         )}
 
         {logs.length < MAX_LOGS && (
@@ -289,16 +309,24 @@ function FishingLogPage() {
             <h2 className="text-sm font-bold mb-4">새 낚시 기록</h2>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium mb-1 block">출조일 *</label>
+                <label className="text-xs font-medium mb-1 block">출조일 <span className="text-red-500">*</span></label>
                 <Input type="date" value={form.fished_at} onChange={(e) => setForm({ ...form, fished_at: e.target.value })} />
               </div>
               <div>
-                <label className="text-xs font-medium mb-1 block">포인트명 *</label>
+                <label className="text-xs font-medium mb-1 block">포인트명 <span className="text-red-500">*</span></label>
                 <Input placeholder="예: 안면도 방파제" value={form.point_name} onChange={(e) => setForm({ ...form, point_name: e.target.value })} />
               </div>
               <div>
-                <label className="text-xs font-medium mb-1 block">메모</label>
-                <Textarea placeholder="그날의 기억을 남겨보세요" rows={3} value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+                <label className="text-xs font-medium mb-1 block">
+                  메모 <span className="text-muted-foreground">({form.memo.length}/{MEMO_MAX}자)</span>
+                </label>
+                <Textarea
+                  placeholder="그날의 기억을 남겨보세요"
+                  rows={3}
+                  value={form.memo}
+                  maxLength={MEMO_MAX}
+                  onChange={(e) => setForm({ ...form, memo: e.target.value })}
+                />
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">날씨</label>
@@ -316,8 +344,11 @@ function FishingLogPage() {
                 <Input placeholder="예: 광어 82cm, 원투" value={form.catch_info} onChange={(e) => setForm({ ...form, catch_info: e.target.value })} />
               </div>
               <div>
-                <label className="text-xs font-medium mb-1 block">사진 (1장)</label>
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="text-xs w-full" />
+                <label className="text-xs font-medium mb-1 block">사진 (최대 1장)</label>
+                <label className="cursor-pointer text-xs text-primary underline hover:text-primary/80">
+                  파일 선택
+                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                </label>
                 {photoPreview && <img src={photoPreview} alt="미리보기" className="mt-2 w-full h-40 object-cover rounded-lg" />}
               </div>
               {formError && <p className="text-xs text-red-500">{formError}</p>}
@@ -333,7 +364,7 @@ function FishingLogPage() {
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>기록을 삭제할까요?</AlertDialogTitle>
+            <AlertDialogTitle>낚시기록을 정말 삭제하시겠습니까?</AlertDialogTitle>
             <AlertDialogDescription>삭제된 기록은 복구할 수 없습니다.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

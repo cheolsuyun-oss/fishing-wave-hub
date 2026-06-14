@@ -233,7 +233,7 @@ const overallColorClass =
         {/* Section 1 - Fishing log */}
         <Card className="mt-4 p-5 bg-white shadow-md">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold">낚시 기록</h2>
+            <h2 className="text-sm font-bold">포인트 메모</h2>
             {!memoEditing && (
               <button
                 type="button"
