@@ -1,20 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/login')({
-  component: RouteComponent,
-})
-
-function RouteComponent() {
-  return <div>Hello "/login"!</div>
-}
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Link } from "@tanstack/react-router";
-import { Fish, User } from "lucide-react";
+import { Fish } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { sendMagicLink, getSession } from "@/lib/supabase";
+import { supabase, sendMagicLink, getSession } from "@/lib/supabase";
 import appIcon from "@/assets/app-icon.png";
 
 export const Route = createFileRoute("/login")({
@@ -113,9 +103,7 @@ function LoginPage() {
                   disabled={loading}
                 />
               </div>
-              {error && (
-                <p className="text-xs text-red-500">{error}</p>
-              )}
+              {error && <p className="text-xs text-red-500">{error}</p>}
               <Button
                 type="button"
                 className="w-full"
@@ -123,6 +111,28 @@ function LoginPage() {
                 disabled={loading || !email.trim()}
               >
                 {loading ? "발송 중..." : "로그인 링크 받기"}
+              </Button>
+              <div className="relative my-2">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-[11px]">
+                  <span className="bg-white px-2 text-muted-foreground">또는</span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={async () => {
+                  await supabase.auth.signInWithOAuth({
+                    provider: "google",
+                    options: { redirectTo: `${window.location.origin}/` },
+                  });
+                }}
+              >
+                <img src="https://www.google.com/favicon.ico" className="w-4 h-4 mr-2" />
+                Google로 로그인
               </Button>
               <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
                 처음 이용하시면 자동으로 회원가입이 됩니다.<br />

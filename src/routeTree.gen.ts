@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as MypageRouteImport } from './routes/mypage'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as FishingLogRouteImport } from './routes/fishing-log'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PointsIdRouteImport } from './routes/points/$id'
 
@@ -30,6 +31,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FishingLogRoute = FishingLogRouteImport.update({
+  id: '/fishing-log',
+  path: '/fishing-log',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -43,6 +49,7 @@ const PointsIdRoute = PointsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/fishing-log': typeof FishingLogRoute
   '/login': typeof LoginRoute
   '/mypage': typeof MypageRoute
   '/search': typeof SearchRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/fishing-log': typeof FishingLogRoute
   '/login': typeof LoginRoute
   '/mypage': typeof MypageRoute
   '/search': typeof SearchRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/fishing-log': typeof FishingLogRoute
   '/login': typeof LoginRoute
   '/mypage': typeof MypageRoute
   '/search': typeof SearchRoute
@@ -65,14 +74,28 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/mypage' | '/search' | '/points/$id'
+  fullPaths:
+    | '/'
+    | '/fishing-log'
+    | '/login'
+    | '/mypage'
+    | '/search'
+    | '/points/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/mypage' | '/search' | '/points/$id'
-  id: '__root__' | '/' | '/login' | '/mypage' | '/search' | '/points/$id'
+  to: '/' | '/fishing-log' | '/login' | '/mypage' | '/search' | '/points/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/fishing-log'
+    | '/login'
+    | '/mypage'
+    | '/search'
+    | '/points/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FishingLogRoute: typeof FishingLogRoute
   LoginRoute: typeof LoginRoute
   MypageRoute: typeof MypageRoute
   SearchRoute: typeof SearchRoute
@@ -102,6 +125,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fishing-log': {
+      id: '/fishing-log'
+      path: '/fishing-log'
+      fullPath: '/fishing-log'
+      preLoaderRoute: typeof FishingLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -121,6 +151,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FishingLogRoute: FishingLogRoute,
   LoginRoute: LoginRoute,
   MypageRoute: MypageRoute,
   SearchRoute: SearchRoute,

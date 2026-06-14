@@ -1,11 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/fishing-log')({
-  component: RouteComponent,
-})
-
-function RouteComponent() {
-  return <div>Hellimport { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Fish, User, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -64,7 +57,6 @@ function FishingLogPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // 새 기록 폼 상태
   const [form, setForm] = useState({
     fished_at: new Date().toISOString().slice(0, 10),
     point_name: "",
@@ -236,16 +228,10 @@ function FishingLogPage() {
               <table className="w-full text-xs">
                 <thead className="bg-muted/50 border-b border-border">
                   <tr>
-                    <th
-                      className="px-3 py-2.5 text-left font-semibold text-muted-foreground cursor-pointer whitespace-nowrap"
-                      onClick={() => toggleSort("fished_at")}
-                    >
+                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground cursor-pointer whitespace-nowrap" onClick={() => toggleSort("fished_at")}>
                       등록일 <SortIcon k="fished_at" />
                     </th>
-                    <th
-                      className="px-3 py-2.5 text-left font-semibold text-muted-foreground cursor-pointer whitespace-nowrap"
-                      onClick={() => toggleSort("point_name")}
-                    >
+                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground cursor-pointer whitespace-nowrap" onClick={() => toggleSort("point_name")}>
                       포인트 <SortIcon k="point_name" />
                     </th>
                     <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">메모</th>
@@ -265,11 +251,7 @@ function FishingLogPage() {
                       </td>
                       <td className="px-3 py-3">
                         {log.photo_url ? (
-                          <img
-                            src={log.photo_url}
-                            alt="낚시 사진"
-                            className="w-12 h-12 object-cover rounded-lg"
-                          />
+                          <img src={log.photo_url} alt="낚시 사진" className="w-12 h-12 object-cover rounded-lg" />
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
@@ -281,11 +263,7 @@ function FishingLogPage() {
                         <span className="line-clamp-2 text-muted-foreground">{log.catch_info ?? "-"}</span>
                       </td>
                       <td className="px-3 py-3">
-                        <button
-                          type="button"
-                          onClick={() => setDeleteId(log.id)}
-                          className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
-                        >
+                        <button type="button" onClick={() => setDeleteId(log.id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
@@ -298,19 +276,13 @@ function FishingLogPage() {
         )}
 
         {logs.length < MAX_LOGS && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setAddOpen(true)}
-            className="mt-4 w-full h-12 border-dashed"
-          >
+          <Button type="button" variant="outline" onClick={() => setAddOpen(true)} className="mt-4 w-full h-12 border-dashed">
             <Plus className="w-4 h-4" />
             기록 추가
           </Button>
         )}
       </div>
 
-      {/* 기록 추가 모달 */}
       {addOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
           <div className="bg-background w-full max-w-md rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto">
@@ -318,43 +290,22 @@ function FishingLogPage() {
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium mb-1 block">출조일 *</label>
-                <Input
-                  type="date"
-                  value={form.fished_at}
-                  onChange={(e) => setForm({ ...form, fished_at: e.target.value })}
-                />
+                <Input type="date" value={form.fished_at} onChange={(e) => setForm({ ...form, fished_at: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">포인트명 *</label>
-                <Input
-                  placeholder="예: 안면도 방파제"
-                  value={form.point_name}
-                  onChange={(e) => setForm({ ...form, point_name: e.target.value })}
-                />
+                <Input placeholder="예: 안면도 방파제" value={form.point_name} onChange={(e) => setForm({ ...form, point_name: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">메모</label>
-                <Textarea
-                  placeholder="그날의 기억을 남겨보세요"
-                  rows={3}
-                  value={form.memo}
-                  onChange={(e) => setForm({ ...form, memo: e.target.value })}
-                />
+                <Textarea placeholder="그날의 기억을 남겨보세요" rows={3} value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">날씨</label>
                 <div className="flex gap-2 flex-wrap">
                   {WEATHER_OPTIONS.map((w) => (
-                    <button
-                      key={w.code}
-                      type="button"
-                      onClick={() => setForm({ ...form, weather_code: w.code })}
-                      className={`text-xl p-1.5 rounded-lg border transition-colors ${
-                        form.weather_code === w.code
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
+                    <button key={w.code} type="button" onClick={() => setForm({ ...form, weather_code: w.code })}
+                      className={`text-xl p-1.5 rounded-lg border transition-colors ${form.weather_code === w.code ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
                       {w.label}
                     </button>
                   ))}
@@ -362,70 +313,35 @@ function FishingLogPage() {
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">조과</label>
-                <Input
-                  placeholder="예: 광어 82cm, 원투"
-                  value={form.catch_info}
-                  onChange={(e) => setForm({ ...form, catch_info: e.target.value })}
-                />
+                <Input placeholder="예: 광어 82cm, 원투" value={form.catch_info} onChange={(e) => setForm({ ...form, catch_info: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">사진 (1장)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                  className="text-xs w-full"
-                />
-                {photoPreview && (
-                  <img
-                    src={photoPreview}
-                    alt="미리보기"
-                    className="mt-2 w-full h-40 object-cover rounded-lg"
-                  />
-                )}
+                <input type="file" accept="image/*" onChange={handlePhotoChange} className="text-xs w-full" />
+                {photoPreview && <img src={photoPreview} alt="미리보기" className="mt-2 w-full h-40 object-cover rounded-lg" />}
               </div>
               {formError && <p className="text-xs text-red-500">{formError}</p>}
               <div className="flex gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => { setAddOpen(false); setFormError(null); }}
-                >
-                  취소
-                </Button>
-                <Button
-                  type="button"
-                  className="flex-1"
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? "저장 중..." : "저장"}
-                </Button>
+                <Button type="button" variant="outline" className="flex-1" onClick={() => { setAddOpen(false); setFormError(null); }}>취소</Button>
+                <Button type="button" className="flex-1" onClick={handleSave} disabled={saving}>{saving ? "저장 중..." : "저장"}</Button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 삭제 확인 */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>기록을 삭제할까요?</AlertDialogTitle>
-            <AlertDialogDescription>
-              삭제된 기록은 복구할 수 없습니다.
-            </AlertDialogDescription>
+            <AlertDialogDescription>삭제된 기록은 복구할 수 없습니다.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600">
-              삭제
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600">삭제</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
   );
-}o "/fishing-log"!</div>
 }

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Fish, User } from "lucide-react";
 import {
   DndContext,
@@ -34,6 +34,7 @@ import { getWeatherWarning } from "@/lib/kma.functions";
 import { getVillageForecast } from "@/lib/forecast.functions";
 import { formatFcstBasis } from "@/lib/geo";
 import { getMulddae } from "@/lib/moonAge";
+import { supabase } from "@/lib/supabase";
 import type { FishingPoint } from "@/lib/points";
 import appIcon from "@/assets/app-icon.png";
 
@@ -92,6 +93,23 @@ function Home() {
   const navigate = useNavigate();
   const { points, remove, reorder, isFull, max } = useFavoritePoints();
   const [limitOpen, setLimitOpen] = useState(false);
+
+  // 매직링크 클릭 후 URL 해시에서 세션 토큰 처리
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token")) {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          // 해시 제거
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      });
+    }
+    if (hash && hash.includes("error=access_denied")) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
