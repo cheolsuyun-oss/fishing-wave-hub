@@ -206,64 +206,17 @@ const overallColorClass =
           <h1 className="text-lg font-bold flex-1 truncate">{point.name}</h1>
         </div>
 
-        {/* Section 1 - Today summary */}
+        {/* Section 1 - Fishing log */}
         <Card className="mt-4 p-5 bg-white shadow-md">
-          <div className="flex items-baseline justify-between mb-1">
-            <h2 className="text-sm font-bold">오늘 요약</h2>
-            <span className="text-xs text-muted-foreground">
-              종합 위험도{" "}
-              <span className={`font-semibold ${overallColorClass}`}>
-                {overallLabel}
-              </span>
-            </span>
+          <h2 className="text-sm font-bold mb-3">낚시 기록</h2>
+          <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+            이 포인트에 대한 메모를 여기에 남길 수 있습니다.
+          </p>
+          <div className="text-[11px] text-muted-foreground font-medium mb-2">조과 기록</div>
+          <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+            아직 등록된 조과 기록이 없습니다.<br />
+            <span className="text-[10px] opacity-70">(최대 3건까지 무료 등록 가능)</span>
           </div>
-          {fcstBasis && (
-            <p className="text-[11px] text-muted-foreground/70 mb-2">{fcstBasis}</p>
-          )}
-          <p className="text-xs text-muted-foreground mb-3">{riskMessage}</p>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s"
-              level={windLevel} />
-            <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m"
-              level={waveLevel} />
-            <Metric icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%"
-              level={rainLevel} />
-            <Metric icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°"
-              level={tempLevel} />
-          </div>
-          <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg bg-red-50 px-3 py-2">
-              <span className="text-red-700 font-semibold">만조</span>{" "}
-              <span className="text-foreground">
-                {tideLoading ? "…" : (tideHighs[0]?.time ?? "-")}
-              </span>
-            </div>
-            <div className="rounded-lg bg-blue-50 px-3 py-2">
-              <span className="text-blue-700 font-semibold">간조</span>{" "}
-              <span className="text-foreground">
-                {tideLoading ? "…" : (tideLows[0]?.time ?? "-")}
-              </span>
-            </div>
-          </div>
-          {(nextEvent || tideRange) && (
-            <div className="mt-2 text-[11px] text-muted-foreground flex items-center justify-between">
-              {nextEvent && (
-                <span>
-                  다음 {nextEvent.type === "high" ? "만조" : "간조"} {nextEvent.time}
-                  {" "}
-                  <span className="text-foreground/70">({nextEvent.inText})</span>
-                </span>
-              )}
-              {tideRange && (
-                <span>
-                  조수차{" "}
-                  <span className="font-semibold text-foreground">
-                    {(tideRange / 100).toFixed(2)}m
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
         </Card>
 
         {/* Section 2 - Tide chart */}
