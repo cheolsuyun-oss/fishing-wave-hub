@@ -1,10 +1,9 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, ChevronRight, X } from "lucide-react";
 import { TopNav } from "@/components/TopNav";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
@@ -17,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase, getSession } from "@/lib/supabase";
-import appIcon from "@/assets/app-icon.png";
+import { useFavoritePoints } from "@/lib/favorites-store";
 
 export const Route = createFileRoute("/fishing-log")({
   component: FishingLogPage,
@@ -27,6 +26,7 @@ type FishingLog = {
   id: string;
   fished_at: string;
   point_name: string;
+  point_id: string | null;
   memo: string | null;
   photo_url: string | null;
   weather_code: string | null;
@@ -36,21 +36,30 @@ type FishingLog = {
 type SortKey = "fished_at" | "point_name";
 type SortDir = "asc" | "desc";
 
-const WEATHER_OPTIONS = [
-  { code: "sunny", label: "☀️" },
-  { code: "partly", label: "⛅" },
-  { code: "cloudy", label: "☁️" },
-  { code: "rainy", label: "🌧️" },
-  { code: "windy", label: "🌬️" },
-  { code: "night_clear", label: "🌙" },
-  { code: "night_moon", label: "🌛" },
-];
-
 const MAX_LOGS = 10;
 const MEMO_MAX = 200;
 
+// 현재 시각을 30분 단위로 반올림
+function roundToHalfHour(): string {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const rounded = minutes < 15 ? 0 : minutes < 45 ? 30 : 60;
+  now.setMinutes(rounded, 0, 0);
+  if (rounded === 60) now.setHours(now.getHours() + 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
+// 최대 선택 가능 일시 (+15분)
+function maxDatetime(): string {
+  const d = new Date(Date.now() + 15 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function FishingLogPage() {
   const navigate = useNavigate();
+  const { points: favoritePoints } = useFavoritePoints();
   const [userId, setUserId] = useState<string | null>(null);
   const [logs, setLogs] = useState<FishingLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,13 +67,14 @@ function FishingLogPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [noFavoriteOpen, setNoFavoriteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [weatherSnapId, setWeatherSnapId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    fished_at: new Date().toISOString().slice(0, 10),
-    point_name: "",
+    fished_at: roundToHalfHour(),
+    point_id: "",
     memo: "",
-    weather_code: "",
     catch_info: "",
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -114,6 +124,18 @@ function FishingLogPage() {
     return sortDir === "asc" ? <ChevronUp className="w-3 h-3 inline" /> : <ChevronDown className="w-3 h-3 inline" />;
   };
 
+  const handleAddClick = () => {
+    if (favoritePoints.length === 0) {
+      setNoFavoriteOpen(true);
+      return;
+    }
+    setForm({ fished_at: roundToHalfHour(), point_id: "", memo: "", catch_info: "" });
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setFormError(null);
+    setAddOpen(true);
+  };
+
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -122,8 +144,8 @@ function FishingLogPage() {
   };
 
   const handleSave = async () => {
-    if (!form.point_name.trim()) {
-      setFormError("포인트명을 입력해 주세요.");
+    if (!form.point_id) {
+      setFormError("포인트를 선택해 주세요.");
       return;
     }
     if (!userId) return;
@@ -133,6 +155,8 @@ function FishingLogPage() {
     }
     setSaving(true);
     setFormError(null);
+
+    const selectedPoint = favoritePoints.find((p) => p.id === form.point_id);
 
     let photo_url: string | null = null;
     if (photoFile) {
@@ -152,9 +176,9 @@ function FishingLogPage() {
     const { error } = await supabase.from("fishing_logs").insert({
       user_id: userId,
       fished_at: form.fished_at,
-      point_name: form.point_name.trim(),
+      point_id: form.point_id,
+      point_name: selectedPoint?.name ?? "",
       memo: form.memo.trim() || null,
-      weather_code: form.weather_code || null,
       catch_info: form.catch_info.trim() || null,
       photo_url,
     });
@@ -166,15 +190,6 @@ function FishingLogPage() {
     }
 
     setAddOpen(false);
-    setForm({
-      fished_at: new Date().toISOString().slice(0, 10),
-      point_name: "",
-      memo: "",
-      weather_code: "",
-      catch_info: "",
-    });
-    setPhotoFile(null);
-    setPhotoPreview(null);
     fetchLogs(userId);
   };
 
@@ -219,14 +234,12 @@ function FishingLogPage() {
           <div className="space-y-2">
             {sorted.map((log) => {
               const isExpanded = expandedId === log.id;
-              const weather = WEATHER_OPTIONS.find((w) => w.code === log.weather_code);
               return (
                 <Card key={log.id} className="bg-white shadow-sm overflow-hidden">
                   <div className="px-4 pt-3 pb-2">
-                    {/* 날짜 + 포인트명 + 삭제 버튼 */}
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="text-[11px] text-muted-foreground flex-shrink-0">{log.fished_at}</span>
+                        <span className="text-[11px] text-muted-foreground flex-shrink-0">{log.fished_at.slice(0, 16).replace("T", " ")}</span>
                         <div className="text-sm font-semibold text-foreground truncate">{log.point_name}</div>
                       </div>
                       <button
@@ -237,7 +250,6 @@ function FishingLogPage() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    {/* 사진 + 날씨/조과/메모 */}
                     <div className="flex items-start gap-3">
                       {log.photo_url ? (
                         <img src={log.photo_url} alt="낚시 사진" className="w-14 h-14 object-cover rounded-lg flex-shrink-0" />
@@ -247,9 +259,16 @@ function FishingLogPage() {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">{weather?.label ?? "—"}</span>
-                          <span className="text-xs text-muted-foreground truncate">{log.catch_info ?? "조과 없음"}</span>
+                        {/* 날씨 클릭 → 스냅샷 팝업 */}
+                        <button
+                          type="button"
+                          onClick={() => setWeatherSnapId(log.id)}
+                          className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                        >
+                          <span className="text-xs text-muted-foreground">날씨 보기 →</span>
+                        </button>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {log.catch_info ?? "조과 없음"}
                         </div>
                         {log.memo && (
                           <button
@@ -264,8 +283,6 @@ function FishingLogPage() {
                       </div>
                     </div>
                   </div>
-
-                  {/* 확장 영역: 메모 전체 */}
                   {isExpanded && log.memo && (
                     <div className="px-4 pb-4 border-t border-border pt-3">
                       <p className="text-xs font-medium text-foreground mb-1">메모</p>
@@ -279,25 +296,64 @@ function FishingLogPage() {
         )}
 
         {logs.length < MAX_LOGS && (
-          <Button type="button" variant="outline" onClick={() => setAddOpen(true)} className="mt-4 w-full h-12 border-dashed">
+          <Button type="button" variant="outline" onClick={handleAddClick} className="mt-4 w-full h-12 border-dashed">
             <Plus className="w-4 h-4" />
             기록 추가
           </Button>
         )}
       </div>
 
+      {/* 즐겨찾기 없을 때 안내 팝업 */}
+      {noFavoriteOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+          <div className="bg-background w-full max-w-sm rounded-2xl p-6 text-center">
+            <div className="flex justify-end mb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setNoFavoriteOpen(false);
+                  navigate({ to: "/search" });
+                }}
+                className="p-1 rounded-full hover:bg-muted text-muted-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm font-medium text-foreground mb-1">즐겨찾기 포인트를 먼저 등록해 주세요</p>
+            <p className="text-xs text-muted-foreground">낚시 기록은 즐겨찾기 포인트와 연동됩니다.<br />X를 누르면 포인트 등록 화면으로 이동합니다.</p>
+          </div>
+        </div>
+      )}
+
+      {/* 기록 추가 모달 */}
       {addOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
           <div className="bg-background w-full max-w-md rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto">
             <h2 className="text-sm font-bold mb-4">새 낚시 기록</h2>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium mb-1 block">출조일 <span className="text-red-500">*</span></label>
-                <Input type="date" value={form.fished_at} onChange={(e) => setForm({ ...form, fished_at: e.target.value })} />
+                <label className="text-xs font-medium mb-1 block">출조일시 <span className="text-red-500">*</span></label>
+                <input
+                  type="datetime-local"
+                  value={form.fished_at}
+                  max={maxDatetime()}
+                  step={1800}
+                  onChange={(e) => setForm({ ...form, fished_at: e.target.value })}
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background"
+                />
               </div>
               <div>
-                <label className="text-xs font-medium mb-1 block">포인트명 <span className="text-red-500">*</span></label>
-                <Input placeholder="예: 안면도 방파제" value={form.point_name} onChange={(e) => setForm({ ...form, point_name: e.target.value })} />
+                <label className="text-xs font-medium mb-1 block">포인트 <span className="text-red-500">*</span></label>
+                <select
+                  value={form.point_id}
+                  onChange={(e) => setForm({ ...form, point_id: e.target.value })}
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background"
+                >
+                  <option value="">포인트 선택</option>
+                  {favoritePoints.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">
@@ -312,19 +368,14 @@ function FishingLogPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium mb-1 block">날씨</label>
-                <div className="flex gap-2 flex-wrap">
-                  {WEATHER_OPTIONS.map((w) => (
-                    <button key={w.code} type="button" onClick={() => setForm({ ...form, weather_code: w.code })}
-                      className={`text-xl p-1.5 rounded-lg border transition-colors ${form.weather_code === w.code ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
-                      {w.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
                 <label className="text-xs font-medium mb-1 block">조과</label>
-                <Input placeholder="예: 광어 82cm, 원투" value={form.catch_info} onChange={(e) => setForm({ ...form, catch_info: e.target.value })} />
+                <input
+                  type="text"
+                  placeholder="예: 광어 82cm, 원투"
+                  value={form.catch_info}
+                  onChange={(e) => setForm({ ...form, catch_info: e.target.value })}
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background"
+                />
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">사진 (최대 1장)</label>
@@ -344,6 +395,28 @@ function FishingLogPage() {
         </div>
       )}
 
+      {/* 날씨 스냅샷 팝업 */}
+      {weatherSnapId && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+          <div className="bg-background w-full max-w-sm rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-bold">날씨 스냅샷</h2>
+              <button
+                type="button"
+                onClick={() => setWeatherSnapId(null)}
+                className="p-1 rounded-full hover:bg-muted text-muted-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              준비중
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
