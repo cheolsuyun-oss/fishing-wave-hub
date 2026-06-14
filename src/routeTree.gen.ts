@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as MypageRouteImport } from './routes/mypage'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PointsIdRouteImport } from './routes/points/$id'
 
@@ -22,6 +23,11 @@ const SearchRoute = SearchRouteImport.update({
 const MypageRoute = MypageRouteImport.update({
   id: '/mypage',
   path: '/mypage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,12 +43,14 @@ const PointsIdRoute = PointsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/mypage': typeof MypageRoute
   '/search': typeof SearchRoute
   '/points/$id': typeof PointsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/mypage': typeof MypageRoute
   '/search': typeof SearchRoute
   '/points/$id': typeof PointsIdRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/mypage': typeof MypageRoute
   '/search': typeof SearchRoute
   '/points/$id': typeof PointsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/mypage' | '/search' | '/points/$id'
+  fullPaths: '/' | '/login' | '/mypage' | '/search' | '/points/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/mypage' | '/search' | '/points/$id'
-  id: '__root__' | '/' | '/mypage' | '/search' | '/points/$id'
+  to: '/' | '/login' | '/mypage' | '/search' | '/points/$id'
+  id: '__root__' | '/' | '/login' | '/mypage' | '/search' | '/points/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   MypageRoute: typeof MypageRoute
   SearchRoute: typeof SearchRoute
   PointsIdRoute: typeof PointsIdRoute
@@ -85,6 +95,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MypageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   MypageRoute: MypageRoute,
   SearchRoute: SearchRoute,
   PointsIdRoute: PointsIdRoute,

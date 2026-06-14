@@ -1,10 +1,23 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Fish, User } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { AlertBanner } from "@/components/AlertBanner";
-import { BottomNav } from "@/components/BottomNav";
 import { PointCard } from "@/components/PointCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +34,7 @@ import { getWeatherWarning } from "@/lib/kma.functions";
 import { getVillageForecast } from "@/lib/forecast.functions";
 import { formatFcstBasis } from "@/lib/geo";
 import { getMulddae } from "@/lib/moonAge";
+import type { FishingPoint } from "@/lib/points";
 import appIcon from "@/assets/app-icon.png";
 
 export const Route = createFileRoute("/")({
@@ -37,15 +51,67 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
+function SortablePointCard({
+  point,
+  onRemove,
+}: {
+  point: FishingPoint;
+  onRemove: (id: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: point.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    scale: isDragging ? "1.03" : "1",
+    boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.15)" : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`transition-shadow transition-transform duration-200 ${isDragging ? "opacity-95" : ""}`}
+    >
+      <PointCard point={point} onRemove={onRemove} />
+    </div>
+  );
+}
+
 function Home() {
   const navigate = useNavigate();
-  const { points, remove, isFull, max } = useFavoritePoints();
+  const { points, remove, reorder, isFull, max } = useFavoritePoints();
   const [limitOpen, setLimitOpen] = useState(false);
 
-  const fetchWarning = useServerFn(getWeatherWarning);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 300, tolerance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 300, tolerance: 5 },
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      reorder(String(active.id), String(over.id));
+    }
+  };
+
   const { data: warning, isLoading, isError } = useQuery({
     queryKey: ["kma-warning"],
-    queryFn: () => fetchWarning(),
+    queryFn: () => getWeatherWarning(),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -70,20 +136,32 @@ function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="mx-auto max-w-md px-4 pt-6 pb-12">
-        <header className="flex items-center gap-2 mb-5">
-          <div className="w-9 h-9 rounded-lg overflow-hidden bg-primary">
-            <img src={appIcon} alt="낚시와바다" className="w-full h-full object-cover" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-foreground leading-tight">
-              낚시와바다
-            </h1>
-            <p className="text-xs text-muted-foreground">The Fisher and the Sea</p>
-          </div>
-        </header>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
+        <div className="mx-auto max-w-md px-4 h-14 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary">
+              <img src={appIcon} alt="낚시와바다" className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground leading-tight">낚시와바다</p>
+              <p className="text-[10px] text-muted-foreground">The Fisher and the Sea</p>
+            </div>
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link to="/fishing-log" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <Fish className="w-4 h-4" />
+              낚시기록
+            </Link>
+            <Link to="/mypage" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <User className="w-4 h-4" />
+              마이페이지
+            </Link>
+          </nav>
+        </div>
+      </header>
 
+      <div className="mx-auto max-w-md px-4 pt-6 pb-12">
         {isLoading ? (
           <div className="rounded-xl bg-muted animate-pulse h-12 w-full" />
         ) : !isError && warning?.hasWarning && warning.message ? (
@@ -92,12 +170,8 @@ function Home() {
 
         <section className="mt-6">
           <div className="flex items-baseline justify-between mb-1">
-            <h2 className="text-sm font-bold text-foreground">
-              즐겨찾기 포인트
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {points.length}/{max}곳
-            </span>
+            <h2 className="text-sm font-bold text-foreground">즐겨찾기 포인트</h2>
+            <span className="text-xs text-muted-foreground">{points.length}/{max}곳</span>
           </div>
           {(fcstBasis || mulddae) && (
             <p className="text-[11px] text-muted-foreground/70 mb-2">
@@ -107,21 +181,40 @@ function Home() {
             </p>
           )}
 
-          <div className="space-y-3">
-            {points.map((p) => (
-              <PointCard key={p.id} point={p} onRemove={remove} />
-            ))}
-          </div>
+          {points.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground text-sm">
+              아직 추가된 포인트가 없어요.<br />신규 포인트를 추가해보세요 🎣
+            </div>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={points.map((p) => p.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  {points.map((p) => (
+                    <SortablePointCard key={p.id} point={p} onRemove={remove} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleAdd}
-            className="mt-3 w-full h-12 border-dashed"
-          >
-            <Plus className="w-4 h-4" />
-            포인트 추가
-          </Button>
+          {!isFull && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAdd}
+              className="mt-3 w-full h-12 border-dashed"
+            >
+              <Plus className="w-4 h-4" />
+              포인트 추가
+            </Button>
+          )}
         </section>
       </div>
 
@@ -141,8 +234,6 @@ function Home() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <BottomNav />
     </div>
   );
 }

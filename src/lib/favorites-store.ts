@@ -53,7 +53,6 @@ export function useFavoritePoints() {
   const remove = useCallback((id: string) => {
     const next = (current ?? read()).filter((x) => x !== id);
     write(next);
-    // 사용자 정의 포인트라면 저장소에서도 정리
     removeCustomPoint(id);
   }, []);
 
@@ -72,6 +71,17 @@ export function useFavoritePoints() {
     return true;
   }, []);
 
+  const reorder = useCallback((fromId: string, toId: string) => {
+    const cur = current ?? read();
+    const from = cur.indexOf(fromId);
+    const to = cur.indexOf(toId);
+    if (from === -1 || to === -1 || from === to) return;
+    const next = [...cur];
+    next.splice(from, 1);
+    next.splice(to, 0, fromId);
+    write(next);
+  }, []);
+
   const all: FishingPoint[] = [...POINTS, ...customs];
   const points: FishingPoint[] = ids
     .map((id) => all.find((p) => p.id === id))
@@ -83,12 +93,12 @@ export function useFavoritePoints() {
     remove,
     add,
     addPoint,
+    reorder,
     isFull: ids.length >= MAX_FAVORITES,
     max: MAX_FAVORITES,
   };
 }
 
-// Non-hook resolution for loaders / external lookups
 export function getAllPointsSync(): FishingPoint[] {
   return [...POINTS, ...getCustomPointsSync()];
 }
