@@ -90,20 +90,16 @@ function getRiskSummaryMessage(
     { label: "강수", level: rainLevel },
     { label: "기온", level: tempLevel },
   ];
-
   const dangers = items.filter((i) => i.level === "danger").map((i) => i.label);
   const cautions = items.filter((i) => i.level === "caution").map((i) => i.label);
-
   if (dangers.length > 0) {
     const dangerText = dangers.join(", ");
     const cautionSuffix = cautions.length > 0 ? ` (${cautions.join(", ")}도 주의)` : "";
     return `${dangerText} 때문에 낚시가 불가능한 날씨입니다. 오늘은 안전하게 쉬어가는 게 좋겠습니다.${cautionSuffix}`;
   }
-
   if (cautions.length > 0) {
     return `${cautions.join(", ")}에 주의가 필요한 날씨입니다. 오늘 출조를 하신다면, 철저하게 준비상황을 다시 점검해 주세요.`;
   }
-
   return "낚시하기에 좋은 날씨입니다.";
 }
 
@@ -152,12 +148,13 @@ function PointDetail() {
     refetchOnWindowFocus: false,
   });
 
- useQuery({
-  queryKey: ["ultraShort", point.id, point.nx, point.ny],
-  queryFn: () => saveUltraShortForecast({ pointId: point.id, nx: point.nx, ny: point.ny }),
-  staleTime: 60 * 60 * 1000,
-  refetchOnWindowFocus: false,
-});
+  useQuery({
+    queryKey: ["ultraShort", point.id, point.nx, point.ny],
+    queryFn: () => saveUltraShortForecast({ pointId: point.id, nx: point.nx, ny: point.ny }),
+    staleTime: 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const { data: fcst } = useQuery({
     queryKey: ["fcst", point.nx, point.ny],
     queryFn: () => getVillageForecast({ nx: point.nx, ny: point.ny }),
@@ -171,13 +168,13 @@ function PointDetail() {
   const waveLevel = waveValue <= 0.5 ? "safe" : waveValue <= 1.4 ? "caution" : "danger";
   const rainLevel = firstRain <= 30 ? "safe" : firstRain <= 60 ? "caution" : "danger";
   const tempLevel = (firstTemp >= 15 && firstTemp <= 25) ? "safe" : (firstTemp >= 5 && firstTemp <= 30) ? "caution" : "danger";
-const riskMessage = getRiskSummaryMessage(windLevel, waveLevel, rainLevel, tempLevel);
-const overallLevel = getOverallLevel(windLevel, waveLevel, rainLevel, tempLevel);
-const overallLabel = overallLevel === "danger" ? "불가" : overallLevel === "caution" ? "주의" : "가능";
-const overallColorClass =
-  overallLevel === "danger" ? "text-red-600" :
-  overallLevel === "caution" ? "text-yellow-600" :
-  "text-sky-600";
+  const riskMessage = getRiskSummaryMessage(windLevel, waveLevel, rainLevel, tempLevel);
+  const overallLevel = getOverallLevel(windLevel, waveLevel, rainLevel, tempLevel);
+  const overallLabel = overallLevel === "danger" ? "불가" : overallLevel === "caution" ? "주의" : "가능";
+  const overallColorClass =
+    overallLevel === "danger" ? "text-red-600" :
+    overallLevel === "caution" ? "text-yellow-600" :
+    "text-sky-600";
   const fcstBasis = formatFcstBasis(fcst?.fcstDate, fcst?.fcstTime);
 
   const apiHighs: TideEventProp[] = tide?.events.filter((e) => e.type === "high") ?? [];
@@ -232,7 +229,28 @@ const overallColorClass =
           <h1 className="text-lg font-bold flex-1 truncate">{point.name}</h1>
         </div>
 
-        {/* Section 1 - Fishing log */}
+        {/* Section 1 - Point info */}
+        <Card className="mt-4 p-5 bg-white shadow-md">
+          <h2 className="text-sm font-bold mb-3">포인트 정보</h2>
+          <dl className="space-y-2 text-sm">
+            <Row label="포인트명" value={point.name} />
+            <Row label="좌표" value="34.8211° N, 128.5435° E" />
+          </dl>
+          <Button asChild className="w-full mt-4" variant="outline">
+            <a
+              href={kakaoMapUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5"
+            >
+              <MapPin className="w-4 h-4" />
+              카카오맵으로 보기
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </Button>
+        </Card>
+
+        {/* Section 2 - Memo + fishing log */}
         <Card className="mt-4 p-5 bg-white shadow-md">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-bold">포인트 메모</h2>
@@ -247,7 +265,6 @@ const overallColorClass =
               </button>
             )}
           </div>
-
           {memoEditing ? (
             <div className="mb-4">
               <Textarea
@@ -284,7 +301,6 @@ const overallColorClass =
               이 포인트에 대한 메모가 없습니다.
             </p>
           )}
-
           <div className="text-[11px] text-muted-foreground font-medium mb-2">조과 기록</div>
           <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
             아직 등록된 조과 기록이 없습니다.<br />
@@ -292,7 +308,14 @@ const overallColorClass =
           </div>
         </Card>
 
-        {/* Section 2 - Tide chart */}
+        {/* Section 3 - Weather charts */}
+        <div className="mt-4">
+          <Suspense fallback={<ChartSkeleton title="기상 예보" />}>
+            <WeatherCharts pointId={point.id} />
+          </Suspense>
+        </div>
+
+        {/* Section 4 - Tide chart */}
         <div className="mt-4">
           <Suspense fallback={<ChartSkeleton title="물때 / 조수" />}>
             <TideChart
@@ -305,14 +328,7 @@ const overallColorClass =
           </Suspense>
         </div>
 
-        {/* Section 3 - Weather charts */}
-        <div className="mt-4">
-          <Suspense fallback={<ChartSkeleton title="기상 예보" />}>
-            <WeatherCharts pointId={point.id} />
-          </Suspense>
-        </div>
-
-        {/* Section 4 - Moon phase + tide */}
+        {/* Section 5 - Moon phase + tide */}
         <Card className="mt-4 p-5 bg-white shadow-md">
           <h2 className="text-sm font-bold mb-3">달 위상 & 조수</h2>
           <div className="flex items-center gap-4">
@@ -360,27 +376,6 @@ const overallColorClass =
           </div>
         </Card>
 
-        {/* Section 5 - Point info */}
-        <Card className="mt-4 p-5 bg-white shadow-md">
-          <h2 className="text-sm font-bold mb-3">포인트 정보</h2>
-          <dl className="space-y-2 text-sm">
-            <Row label="포인트명" value={point.name} />
-
-            <Row label="좌표" value="34.8211° N, 128.5435° E" />
-          </dl>
-<Button asChild className="w-full mt-4" variant="outline">
-            <a
-              href={kakaoMapUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5"
-            >
-              <MapPin className="w-4 h-4" />
-              카카오맵으로 보기
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </Button>
-        </Card>
       </div>
     </div>
   );

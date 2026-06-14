@@ -201,17 +201,15 @@ function Home() {
             </DndContext>
           )}
 
-          {!isFull && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleAdd}
-              className="mt-3 w-full h-12 border-dashed"
-            >
-              <Plus className="w-4 h-4" />
-              포인트 추가
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleAdd}
+            className="mt-3 w-full h-12 border-dashed"
+          >
+            <Plus className="w-4 h-4" />
+            포인트 추가
+          </Button>
         </section>
       </div>
 
