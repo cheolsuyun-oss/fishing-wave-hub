@@ -209,9 +209,15 @@ const overallColorClass =
         {/* Section 1 - Fishing log */}
         <Card className="mt-4 p-5 bg-white shadow-md">
           <h2 className="text-sm font-bold mb-3">낚시 기록</h2>
-          <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-            이 포인트에 대한 메모를 여기에 남길 수 있습니다.
-          </p>
+          {point.memo ? (
+            <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+              {point.memo}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground/50 leading-relaxed mb-4">
+              이 포인트에 대한 메모가 없습니다.
+            </p>
+          )}
           <div className="text-[11px] text-muted-foreground font-medium mb-2">조과 기록</div>
           <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
             아직 등록된 조과 기록이 없습니다.<br />

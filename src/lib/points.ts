@@ -3,7 +3,7 @@ export type RiskLevel = "safe" | "caution" | "danger";
 export interface FishingPoint {
   id: string;
   name: string;
-  region: string;
+  memo?: string;
   sea: "동해" | "서해" | "남해" | "제주";
   risk: RiskLevel;
   windSpeed: number;
@@ -20,7 +20,6 @@ export const POINTS: FishingPoint[] = [
   {
     id: "mukho-breakwater",
     name: "강원 묵호항 방파제",
-    region: "강원 동해시",
     sea: "동해",
     risk: "safe",
     windSpeed: 4,
@@ -35,7 +34,6 @@ export const POINTS: FishingPoint[] = [
   {
     id: "daecheon-breakwater",
     name: "충남 대천항 방파제",
-    region: "충남 보령시",
     sea: "서해",
     risk: "caution",
     windSpeed: 8,
@@ -50,7 +48,6 @@ export const POINTS: FishingPoint[] = [
   {
     id: "tongyeong-breakwater",
     name: "경남 통영항 방파제",
-    region: "경남 통영시",
     sea: "남해",
     risk: "safe",
     windSpeed: 5,

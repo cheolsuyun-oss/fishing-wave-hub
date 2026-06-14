@@ -120,7 +120,8 @@ export function PointCard({
               {risk.label}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5 mb-3">{point.region}</p>
+        
+
           <p className="text-xs text-muted-foreground mb-3">{
             overallLevel === "danger"
               ? "출조가 불가능한 날씨입니다."

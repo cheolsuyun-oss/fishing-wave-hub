@@ -244,7 +244,7 @@ function SearchPage() {
     const point: FishingPoint = {
       id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: trimmed,
-      region: memo.trim() || `${picked.lat.toFixed(4)}, ${picked.lng.toFixed(4)}`,
+      memo: memo.trim() || undefined,
       sea,
       risk: "safe",
       windSpeed: 0,
