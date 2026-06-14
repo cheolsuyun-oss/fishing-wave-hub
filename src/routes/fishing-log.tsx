@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { User, Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react";
+import { TopNav } from "@/components/TopNav";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -186,25 +187,7 @@ function FishingLogPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto max-w-md px-4 h-14 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary">
-              <img src={appIcon} alt="낚시와바다" className="w-full h-full object-cover" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-foreground leading-tight">낚시와바다</p>
-              <p className="text-[10px] text-muted-foreground">The Fisher and the Sea</p>
-            </div>
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link to="/mypage" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-              <User className="w-4 h-4" />
-              마이페이지
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <TopNav />
 
       <div className="mx-auto max-w-md px-4 pt-6 pb-12">
         <div className="flex items-center justify-between mb-3">

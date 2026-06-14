@@ -13,6 +13,7 @@ import {
   Check,
   X,
 } from "lucide-react";
+import { TopNav } from "@/components/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -217,8 +218,9 @@ const overallColorClass =
 
   return (
     <div className="min-h-screen bg-background">
+      <TopNav />
       <div className="mx-auto max-w-md px-4 pt-3 pb-12">
-        {/* Header */}
+        {/* 뒤로가기 + 포인트명 */}
         <div className="flex items-center gap-2 -ml-2">
           <Link
             to="/"
