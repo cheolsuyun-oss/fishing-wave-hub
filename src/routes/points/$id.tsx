@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -9,11 +9,15 @@ import {
   Thermometer,
   MapPin,
   ExternalLink,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { getPoint, RISK_META, type FishingPoint } from "@/lib/points";
 import { getCustomPointsSync, useCustomPoints } from "@/lib/custom-points-store";
 import { getPointDetail } from "@/lib/point-detail-data";
@@ -191,6 +195,26 @@ const overallColorClass =
 
   const kakaoMapUrl = `https://map.kakao.com/?q=${encodeURIComponent(point.name)}`;
 
+  const MEMO_KEY = `fishing.memo.${point.id}`;
+  const [memoText, setMemoText] = useState<string>(
+    () => localStorage.getItem(MEMO_KEY) ?? point.memo ?? ""
+  );
+  const [memoEditing, setMemoEditing] = useState(false);
+  const [memoDraft, setMemoDraft] = useState("");
+
+  const startMemoEdit = () => {
+    setMemoDraft(memoText);
+    setMemoEditing(true);
+  };
+  const saveMemo = () => {
+    setMemoText(memoDraft);
+    localStorage.setItem(MEMO_KEY, memoDraft);
+    setMemoEditing(false);
+  };
+  const cancelMemo = () => {
+    setMemoEditing(false);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-md px-4 pt-3 pb-12">
@@ -208,16 +232,57 @@ const overallColorClass =
 
         {/* Section 1 - Fishing log */}
         <Card className="mt-4 p-5 bg-white shadow-md">
-          <h2 className="text-sm font-bold mb-3">낚시 기록</h2>
-          {point.memo ? (
-            <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-              {point.memo}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold">낚시 기록</h2>
+            {!memoEditing && (
+              <button
+                type="button"
+                onClick={startMemoEdit}
+                className="p-1 rounded-full hover:bg-muted text-muted-foreground"
+                aria-label="메모 편집"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {memoEditing ? (
+            <div className="mb-4">
+              <Textarea
+                value={memoDraft}
+                onChange={(e) => setMemoDraft(e.target.value)}
+                placeholder="이 포인트에 대한 메모를 입력하세요"
+                rows={4}
+                maxLength={300}
+                className="text-xs"
+              />
+              <div className="flex gap-2 mt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={cancelMemo}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded"
+                >
+                  <X className="w-3.5 h-3.5" /> 취소
+                </button>
+                <button
+                  type="button"
+                  onClick={saveMemo}
+                  className="flex items-center gap-1 text-xs text-primary font-medium hover:text-primary/80 px-2 py-1 rounded"
+                >
+                  <Check className="w-3.5 h-3.5" /> 저장
+                </button>
+              </div>
+            </div>
+          ) : memoText ? (
+            <p className="text-xs text-muted-foreground leading-relaxed mb-4 whitespace-pre-wrap">
+              {memoText}
             </p>
           ) : (
             <p className="text-xs text-muted-foreground/50 leading-relaxed mb-4">
               이 포인트에 대한 메모가 없습니다.
             </p>
           )}
+
           <div className="text-[11px] text-muted-foreground font-medium mb-2">조과 기록</div>
           <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
             아직 등록된 조과 기록이 없습니다.<br />
@@ -298,7 +363,7 @@ const overallColorClass =
           <h2 className="text-sm font-bold mb-3">포인트 정보</h2>
           <dl className="space-y-2 text-sm">
             <Row label="포인트명" value={point.name} />
-            <Row label="지역" value={point.region} />
+
             <Row label="좌표" value="34.8211° N, 128.5435° E" />
           </dl>
 <Button asChild className="w-full mt-4" variant="outline">
