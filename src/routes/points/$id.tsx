@@ -123,6 +123,37 @@ function PointDetail() {
   const customs = useCustomPoints();
   const point = ssrPoint ?? customs.find((p) => p.id === id);
 
+  const { data: tide, isLoading: tideLoading } = useQuery({
+    queryKey: ["tide", point?.tideStationCode ?? "none"],
+    queryFn: () => getTidePredict({ stationCode: point!.tideStationCode }),
+    enabled: !!point,
+    staleTime: 6 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  useQuery({
+    queryKey: ["ultraShort", point?.id ?? "none", point?.nx ?? 0, point?.ny ?? 0],
+    queryFn: () => saveUltraShortForecast({ pointId: point!.id, nx: point!.nx, ny: point!.ny }),
+    enabled: !!point,
+    staleTime: 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: fcst } = useQuery({
+    queryKey: ["fcst", point?.nx ?? 0, point?.ny ?? 0],
+    queryFn: () => getVillageForecast({ nx: point!.nx, ny: point!.ny }),
+    enabled: !!point,
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const MEMO_KEY = point ? `fishing.memo.${point.id}` : "fishing.memo.__none__";
+  const [memoText, setMemoText] = useState<string>(
+    () => (typeof window !== "undefined" ? localStorage.getItem(MEMO_KEY) : null) ?? point?.memo ?? ""
+  );
+  const [memoEditing, setMemoEditing] = useState(false);
+  const [memoDraft, setMemoDraft] = useState("");
+
   if (!point) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -140,27 +171,6 @@ function PointDetail() {
   const detail = getPointDetail(point.id);
   const firstRain = detail.rain[0]?.value ?? 0;
   const firstTemp = detail.temp[Math.floor(detail.temp.length / 2)]?.value ?? 0;
-
-  const { data: tide, isLoading: tideLoading } = useQuery({
-    queryKey: ["tide", point.tideStationCode],
-    queryFn: () => getTidePredict({ stationCode: point.tideStationCode }),
-    staleTime: 6 * 60 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  useQuery({
-    queryKey: ["ultraShort", point.id, point.nx, point.ny],
-    queryFn: () => saveUltraShortForecast({ pointId: point.id, nx: point.nx, ny: point.ny }),
-    staleTime: 60 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  const { data: fcst } = useQuery({
-    queryKey: ["fcst", point.nx, point.ny],
-    queryFn: () => getVillageForecast({ nx: point.nx, ny: point.ny }),
-    staleTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
 
   const windValue = fcst?.wsd != null ? fcst.wsd : point.windSpeed;
   const waveValue = fcst?.wav != null ? fcst.wav : point.waveHeight;
@@ -192,13 +202,6 @@ function PointDetail() {
   const tideRange = computeRange(tide?.events ?? []);
 
   const kakaoMapUrl = `https://map.kakao.com/?q=${encodeURIComponent(point.name)}`;
-
-  const MEMO_KEY = `fishing.memo.${point.id}`;
-  const [memoText, setMemoText] = useState<string>(
-    () => localStorage.getItem(MEMO_KEY) ?? point.memo ?? ""
-  );
-  const [memoEditing, setMemoEditing] = useState(false);
-  const [memoDraft, setMemoDraft] = useState("");
 
   const startMemoEdit = () => {
     setMemoDraft(memoText);

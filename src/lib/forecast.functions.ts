@@ -1,3 +1,6 @@
+import { supabase } from "./supabase";
+import { nearestStationCodeByGrid } from "./geo";
+
 export type VillageForecast = {
   nx: number;
   ny: number;
@@ -38,7 +41,7 @@ type NcstItem = {
 
 const TTL_MS = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; data: VillageForecast }>();
-const timelineCache = new Map<string, { at: number; data: VillageForecastHour[] }>();
+// timelineCache 제거 — React Query가 캐싱 담당
 
 function pickBase(): { baseDate: string; baseTime: string } {
   const nowKst = new Date(Date.now() + 9 * 3600_000 - 15 * 60_000);
@@ -307,13 +310,83 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
   }
 }
 
+async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageForecastHour[]> {
+  const stationCode = nearestStationCodeByGrid(nx, ny);
+
+  const now = new Date();
+  const from = new Date(now.getTime() - 1 * 3600_000).toISOString(); // 1시간 전부터
+  const toDate = new Date(now.getTime() + 72 * 3600_000);
+  const toStr = toDate.toISOString();
+  const todayStr = `${new Date(Date.now() + 9 * 3600_000).getUTCFullYear()}-${String(new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1).padStart(2, "0")}-${String(new Date(Date.now() + 9 * 3600_000).getUTCDate()).padStart(2, "0")}`;
+
+  const { data, error } = await supabase
+    .from("ultra_short_forecasts")
+    .select("forecast_dt, wind_speed, wind_dir, temp, precip_1h")
+    .eq("station_code", stationCode)
+    .gte("forecast_dt", from)
+    .lte("forecast_dt", toStr)
+    .order("forecast_dt", { ascending: true })
+    .limit(200);
+
+  console.log("[Supabase]", stationCode, { from, toStr, count: data?.length, error });
+
+  if (error || !data || data.length < 6) return [];
+
+  const todayKst = new Date(Date.now() + 9 * 3600_000);
+  const d0 = new Date(`${todayStr}T00:00:00+09:00`);
+
+  return data.map((row) => {
+    const dt = new Date(row.forecast_dt);
+    const hourOfDay = dt.getUTCHours(); // KST+9 저장이므로 UTC시간 = KST
+    const fcstDate = `${dt.getUTCFullYear()}${String(dt.getUTCMonth() + 1).padStart(2, "0")}${String(dt.getUTCDate()).padStart(2, "0")}`;
+    const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
+    const dayDiff = Math.round((dt.getTime() - d0.getTime()) / 86400000);
+    const hour = dayDiff * 24 + hourOfDay;
+
+    return {
+      fcstDate,
+      fcstTime,
+      hour,
+      tmp: row.temp ?? null,
+      wsd: row.wind_speed ?? null,
+      vec: row.wind_dir ?? null,
+      pop: null, // 초단기예보에 없음, 단기예보 폴백에서 채움
+      wav: null, // 초단기예보에 없음, 단기예보 폴백에서 채움
+    };
+  });
+}
+
 export async function getVillageForecastTimeline(data: { nx: number; ny: number }): Promise<VillageForecastHour[]> {
   const now = Date.now();
   const key = `${data.nx},${data.ny}`;
-  const hit = timelineCache.get(key);
-  if (hit && now - hit.at < TTL_MS) return hit.data;
 
   try {
+    // 1단계: Supabase 초단기예보 데이터 시도
+    const sbTimeline = await getTimelineFromSupabase(data.nx, data.ny);
+
+    if (sbTimeline.length >= 6) {
+      // Supabase 데이터로 기본 timeline 구성 후, pop/wav는 단기예보에서 보완
+      try {
+        const items = await fetchItems(data.nx, data.ny);
+        const pick = (cat: string, fcstDate: string, fcstTime: string) => {
+          const it = items.find((i) => i.category === cat && i.fcstDate === fcstDate && i.fcstTime === fcstTime);
+          if (!it) return null;
+          const n = Number(it.fcstValue);
+          return Number.isFinite(n) ? n : null;
+        };
+        const merged = sbTimeline.map((row) => ({
+          ...row,
+          pop: pick("POP", row.fcstDate, row.fcstTime),
+          wav: pick("WAV", row.fcstDate, row.fcstTime),
+        }));
+        return merged;
+      } catch {
+        // pop/wav 보완 실패해도 Supabase 데이터만으로 반환
+        return sbTimeline;
+      }
+    }
+
+    // 2단계: Supabase 데이터 부족 시 KMA API 폴백
     const items = await fetchItems(data.nx, data.ny);
 
     const todayKst = new Date(Date.now() + 9 * 3600_000);
@@ -349,7 +422,6 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
       };
     });
 
-    timelineCache.set(key, { at: now, data: timeline });
     return timeline;
   } catch (err) {
     console.error("KMA timeline failed:", err);

@@ -77,6 +77,20 @@ export function nearestTideStation(lat: number, lng: number) {
   return best;
 }
 
+// nx/ny 격자 기준으로 가장 가까운 관측소 code 반환
+export function nearestStationCodeByGrid(nx: number, ny: number): string {
+  let best = TIDE_STATIONS[0];
+  let bestD = Infinity;
+  for (const s of (tideStationsMaster as Array<{ code: string; name: string; lat: number; lng: number; nx: number; ny: number; sea: string }>)) {
+    const d = Math.sqrt((s.nx - nx) ** 2 + (s.ny - ny) ** 2);
+    if (d < bestD) {
+      bestD = d;
+      best = s as unknown as TideStation;
+    }
+  }
+  return best.code;
+}
+
 // 좌표 기반 해역 추정 (제주권 포함 4분류)
 export function inferSea(lat: number, lng: number): FishingPoint["sea"] {
   // 제주 본섬 및 인근 도서 (대략 위도 33~34.3, 경도 126.0~127.0 권역 + 이어도)
