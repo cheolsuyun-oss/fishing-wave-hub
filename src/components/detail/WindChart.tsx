@@ -132,7 +132,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   // 초단기실황 현재값
   const { data: currentFcst } = useQuery({
-    queryKey: ["fcstCurrent", point?.nx, point?.ny],
+    queryKey: ["fcst", point?.nx, point?.ny],
     queryFn: () => getVillageForecast({ nx: point!.nx, ny: point!.ny }),
     enabled: !!point,
     staleTime: 30 * 60 * 1000,
