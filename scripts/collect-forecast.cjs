@@ -58,18 +58,18 @@ async function collectPoint(point) {
     return {
       station_code: point.code,
       forecast_dt: dt,
-      wind_speed: cats.WSD ? parseFloat(cats.WSD) : null,
-      wind_dir: cats.VEC ? parseInt(cats.VEC) : null,
-      wave_height: cats.WAV ? parseFloat(cats.WAV) : null,
-      precip_type: cats.PTY ? parseInt(cats.PTY) : null,
-      precip_1h: cats.RN1 ? parseFloat(cats.RN1) : null,
       temp: cats.T1H ? parseFloat(cats.T1H) : null,
+      precip_1h: cats.RN1 ? parseFloat(cats.RN1) : null,
+      precip_type: cats.PTY ? parseInt(cats.PTY) : null,
+      humidity: cats.REH ? parseInt(cats.REH) : null,
+      wind_dir: cats.VEC ? parseInt(cats.VEC) : null,
+      wind_speed: cats.WSD ? parseFloat(cats.WSD) : null,
+      sky: cats.SKY ? parseInt(cats.SKY) : null,
       fetched_at: new Date().toISOString(),
-      source: "ultra_short",
     };
   });
 
-  const sbRes = await fetch(SB_URL + "/rest/v1/marine_forecasts", {
+  const sbRes = await fetch(SB_URL + "/rest/v1/ultra_short_forecasts", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -84,13 +84,18 @@ async function collectPoint(point) {
   console.log(point.code, sbRes.status, JSON.stringify(result).slice(0, 100));
 }
 
+async function collectChunk(chunk) {
+  await Promise.all(chunk.map(point => collectPoint(point).catch(e => {
+    console.error(point.code, e.message);
+  })));
+}
+
 (async () => {
-  for (const point of POINTS) {
-    try {
-      await collectPoint(point);
-    } catch (e) {
-      console.error(point.code, e.message);
-    }
+  const CHUNK_SIZE = 10;
+  for (let i = 0; i < POINTS.length; i += CHUNK_SIZE) {
+    const chunk = POINTS.slice(i, i + CHUNK_SIZE);
+    await collectChunk(chunk);
+    console.log(`${i + chunk.length}/${POINTS.length} 완료`);
   }
-  console.log("완료");
+  console.log("전체 완료");
 })();
