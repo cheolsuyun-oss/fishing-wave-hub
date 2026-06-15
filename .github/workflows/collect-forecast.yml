@@ -12,11 +12,7 @@ jobs:
       - name: Collect KMA forecast and save to Supabase
         run: |
           node -e "
-          const POINTS = [
-            { id: 'mukho', nx: 102, ny: 100 },
-            { id: 'daecheon', nx: 54, ny: 100 },
-            { id: 'tongyeong', nx: 97, ny: 66 },
-          ];
+          const POINTS = [{"code":"DT_0001","nx":53,"ny":124},{"code":"DT_0002","nx":57,"ny":114},{"code":"DT_0003","nx":50,"ny":80},{"code":"DT_0004","nx":53,"ny":39},{"code":"DT_0005","nx":97,"ny":74},{"code":"DT_0006","nx":97,"ny":127},{"code":"DT_0007","nx":50,"ny":66},{"code":"DT_0008","nx":54,"ny":119},{"code":"DT_0010","nx":53,"ny":32},{"code":"DT_0011","nx":103,"ny":109},{"code":"DT_0012","nx":87,"ny":141},{"code":"DT_0013","nx":127,"ny":128},{"code":"DT_0014","nx":87,"ny":68},{"code":"DT_0016","nx":75,"ny":66},{"code":"DT_0017","nx":49,"ny":114},{"code":"DT_0018","nx":53,"ny":92},{"code":"DT_0020","nx":103,"ny":83},{"code":"DT_0021","nx":48,"ny":48},{"code":"DT_0022","nx":60,"ny":37},{"code":"DT_0023","nx":48,"ny":32},{"code":"DT_0024","nx":55,"ny":93},{"code":"DT_0025","nx":52,"ny":101},{"code":"DT_0026","nx":67,"ny":60},{"code":"DT_0027","nx":57,"ny":56},{"code":"DT_0028","nx":49,"ny":57},{"code":"DT_0029","nx":91,"ny":67},{"code":"DT_0031","nx":67,"ny":50},{"code":"DT_0032","nx":52,"ny":130},{"code":"DT_0035","nx":33,"ny":64},{"code":"DT_0036","nx":21,"ny":132},{"code":"DT_0037","nx":43,"ny":95},{"code":"DT_0038","nx":43,"ny":119},{"code":"DT_0039","nx":108,"ny":110},{"code":"DT_0040","nx":144,"ny":123},{"code":"DT_0041","nx":46,"ny":51},{"code":"DT_0042","nx":84,"ny":65},{"code":"DT_0043","nx":50,"ny":120},{"code":"DT_0044","nx":53,"ny":126},{"code":"DT_0046","nx":128,"ny":129},{"code":"DT_0047","nx":48,"ny":30},{"code":"DT_0048","nx":87,"ny":141},{"code":"DT_0049","nx":74,"ny":69},{"code":"DT_0050","nx":47,"ny":112},{"code":"DT_0051","nx":52,"ny":95},{"code":"DT_0052","nx":53,"ny":122},{"code":"DT_0054","nx":90,"ny":75},{"code":"DT_0056","nx":93,"ny":73},{"code":"DT_0057","nx":97,"ny":126},{"code":"DT_0058","nx":53,"ny":127},{"code":"DT_0059","nx":21,"ny":135},{"code":"DT_0060","nx":38,"ny":129},{"code":"DT_0061","nx":80,"ny":70},{"code":"DT_0062","nx":89,"ny":76},{"code":"DT_0063","nx":93,"ny":72},{"code":"DT_0064","nx":49,"ny":131},{"code":"DT_0065","nx":46,"ny":119},{"code":"DT_0067","nx":45,"ny":107},{"code":"DT_0068","nx":48,"ny":84},{"code":"DT_0091","nx":102,"ny":95},{"code":"DT_0092","nx":69,"ny":64},{"code":"DT_0093","nx":51,"ny":122},{"code":"DT_0094","nx":41,"ny":54},{"code":"IE_0060","nx":28,"ny":8},{"code":"IE_0061","nx":17,"ny":48},{"code":"IE_0062","nx":21,"ny":124},{"code":"SO_0326","nx":80,"ny":65},{"
 
           const KMA_KEY = process.env.KMA_API_KEY;
           const SB_URL = process.env.SUPABASE_URL;
@@ -74,7 +70,7 @@ jobs:
               const [d, t] = key.split('_');
               const dt = d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8) + 'T' + t.slice(0,2) + ':' + t.slice(2,4) + ':00+09:00';
               return {
-                point_id: point.id,
+                station_code: point.code,
                 forecast_dt: dt,
                 wind_speed: cats.WSD ? parseFloat(cats.WSD) : null,
                 wind_dir: cats.VEC ? parseInt(cats.VEC) : null,
