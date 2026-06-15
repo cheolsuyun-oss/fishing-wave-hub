@@ -1,6 +1,7 @@
-﻿import { Link } from "@tanstack/react-router";
+﻿import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Wind, Waves, CloudRain, Thermometer, ChevronRight, X } from "lucide-react";
+import { Wind, Waves, CloudRain, Thermometer, ChevronRight, X, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -20,6 +21,13 @@ import { getTidePredict, type TideEvent } from "@/lib/tide.functions";
 import { getPointDetail } from "@/lib/point-detail-data";
 
 type Level = "safe" | "caution" | "danger";
+
+const METRIC_INFO: Record<string, string> = {
+  풍속: "출조가능 ≤5.6 m/s\n주의 5.6~10 m/s\n출조불가 >10 m/s",
+  파고: "출조가능 ≤0.5 m\n주의 0.5~1.4 m\n출조불가 >1.4 m",
+  강수: "출조가능 ≤30%\n주의 30~60%\n출조불가 >60%",
+  기온: "출조가능 15~25°C\n주의 5~14 / 26~30°C\n출조불가 ≤4 / ≥31°C",
+};
 
 function tideSummary(events: TideEvent[]): { type: "high" | "low"; time: string; inText: string } | null {
   if (events.length === 0) return null;
@@ -120,7 +128,6 @@ export function PointCard({
               {risk.label}
             </Badge>
           </div>
-        
 
           <p className="text-xs text-muted-foreground mb-3">{
             overallLevel === "danger"
@@ -222,13 +229,54 @@ function Metric({
   unit: string;
   level?: Level;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
+
   const bg =
     level === "danger" ? "bg-red-100 border-red-300" :
     level === "caution" ? "bg-yellow-100 border-yellow-300" :
     level === "safe" ? "bg-sky-100 border-sky-300" :
     "bg-muted border-border";
+
   return (
-    <div className={`rounded-xl border py-2.5 ${bg}`}>
+    <div className={`relative rounded-xl border py-2.5 ${bg}`}>
+      {/* ⓘ 버튼 */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowInfo((v) => !v);
+        }}
+        className="absolute top-1 right-1 text-muted-foreground/50 hover:text-muted-foreground"
+        aria-label="기준 보기"
+      >
+        <Info className="w-3 h-3" />
+      </button>
+
+      {/* 툴팁 */}
+      {showInfo && (
+        <div
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-popover border border-border rounded-lg shadow-lg px-3 py-2 text-left whitespace-pre text-[10px] text-foreground leading-relaxed"
+          style={{ minWidth: "130px" }}
+        >
+          <div className="font-semibold mb-1 text-[11px]">{label} 기준</div>
+          <span className="text-sky-600">● </span>출조가능<br />
+          <span className="text-yellow-500">● </span>주의<br />
+          <span className="text-red-500">● </span>출조불가
+          <div className="mt-1.5 border-t border-border pt-1.5 text-muted-foreground whitespace-pre">
+            {METRIC_INFO[label]}
+          </div>
+          {/* 말풍선 꼬리 */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0"
+            style={{
+              borderLeft: "5px solid transparent",
+              borderRight: "5px solid transparent",
+              borderTop: "5px solid var(--border)",
+            }}
+          />
+        </div>
+      )}
+
       <div className="flex items-center justify-center text-primary mb-1">
         {icon}
       </div>
