@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { windColor } from "@/lib/point-detail-data";
 import { getSunInfo } from "@/lib/sun.functions";
 import { buildSunBands, bandFill, bandOpacity } from "@/lib/sun-bands";
-import { getVillageForecastTimeline, type VillageForecastHour } from "@/lib/forecast.functions";
+import { getVillageForecastTimeline, getVillageForecast, type VillageForecastHour } from "@/lib/forecast.functions";
 import { useQuery } from "@tanstack/react-query";
 import { getPoint } from "@/lib/points";
 import { getCustomPointsSync } from "@/lib/custom-points-store";
@@ -43,7 +43,7 @@ function buildData(timeline: VillageForecastHour[]): ChartPoint[] {
       t: h.hour,
       hourOfDay: h.hour % 24,
       speed: h.wsd ?? 0,
-      gust: Math.round(((h.wsd ?? 0) * 1.3) * 10) / 10, // 돌풍 추정 (실데이터 없으므로 1.3배)
+      gust: Math.round(((h.wsd ?? 0) * 1.3) * 10) / 10,
       dir: h.vec ?? 0,
       dirLabel: degToLabel(h.vec ?? 0),
     }));
@@ -116,6 +116,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const [range, setRange] = useState<Range>(1);
   const [sunInfo, setSunInfo] = useState<{ sunrise: number; sunset: number } | null>(null);
   const [activeT, setActiveT] = useState<number>(nowHour());
+  const [isDragging, setIsDragging] = useState(false);
 
   const point = useMemo(() => {
     return getPoint(pointId) ?? getCustomPointsSync().find((p) => p.id === pointId);
@@ -124,6 +125,15 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const { data: timeline = [] } = useQuery({
     queryKey: ["fcstTimeline", point?.nx, point?.ny],
     queryFn: () => getVillageForecastTimeline({ nx: point!.nx, ny: point!.ny }),
+    enabled: !!point,
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  // 초단기실황 현재값
+  const { data: currentFcst } = useQuery({
+    queryKey: ["fcstCurrent", point?.nx, point?.ny],
+    queryFn: () => getVillageForecast({ nx: point!.nx, ny: point!.ny }),
     enabled: !!point,
     staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -142,6 +152,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   useEffect(() => {
     setActiveT(nowHour());
+    setIsDragging(false);
   }, [range]);
 
   const sunBands = useMemo(() => {
@@ -152,18 +163,40 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   const arrowEvery = range === 1 ? 1 : 2;
 
-  const activePoint = data.length > 0
-    ? data.reduce(
+  // 드래그 중이면 timeline 값, 아니면 초단기실황 현재값
+  const activePoint = useMemo(() => {
+    if (isDragging || !currentFcst?.wsd) {
+      // 탐색 중이거나 실황 없으면 timeline에서 가장 가까운 값
+      if (!data.length) return null;
+      return data.reduce(
         (best, p) => Math.abs(p.t - activeT) < Math.abs(best.t - activeT) ? p : best,
         data[0],
-      )
-    : null;
+      );
+    }
+    // 실황값 표시 (현재 탐색선 위치)
+    return {
+      t: currentNow,
+      hourOfDay: Math.floor(currentNow),
+      speed: currentFcst.wsd,
+      gust: Math.round((currentFcst.wsd * 1.3) * 10) / 10,
+      dir: currentFcst.vec ?? 0,
+      dirLabel: degToLabel(currentFcst.vec ?? 0),
+    };
+  }, [isDragging, currentFcst, data, activeT, currentNow]);
 
   const handleMove = (state: { activeLabel?: string | number }) => {
     if (state?.activeLabel !== undefined && state.activeLabel !== null) {
       const v = Number(state.activeLabel);
-      if (!Number.isNaN(v)) setActiveT(v);
+      if (!Number.isNaN(v)) {
+        setActiveT(v);
+        setIsDragging(true);
+      }
     }
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+    setActiveT(nowHour());
   };
 
   const activeHourInt = Math.floor(activeT);
@@ -172,7 +205,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   return (
     <Card className="p-4 bg-white shadow-md overflow-hidden">
-      {/* 헤더: 제목 + 탭 */}
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-bold">바람</h2>
         <div className="flex rounded-full bg-muted p-0.5 text-xs">
@@ -192,7 +224,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
         </div>
       </div>
 
-      {/* 풍속 + 돌풍 한 줄 */}
       {activePoint && (
         <div className="flex items-center gap-2 mb-1">
           <WindPropeller speed={activePoint.speed} />
@@ -223,7 +254,10 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
       <div className="mb-3" />
 
-      <div className="h-56 w-full -mx-2 touch-pan-y select-none">
+      <div
+        className="h-56 w-full -mx-2 touch-pan-y select-none"
+        onMouseLeave={handleMouseLeave}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
