@@ -1,5 +1,6 @@
 import type { FishingPoint } from "./points";
 import tideStationsMaster from "../data/tide-stations-master.json";
+import tideStationsGrid from "../data/tide-stations-grid.json";
 
 // Haversine distance in meters
 export function haversine(
@@ -78,17 +79,22 @@ export function nearestTideStation(lat: number, lng: number) {
 }
 
 // nx/ny 격자 기준으로 가장 가까운 관측소 code 반환
+import tideStationsGrid from "../data/tide-stations-grid.json";
+
+type GridStation = { code: string; nx: number; ny: number };
+
 export function nearestStationCodeByGrid(nx: number, ny: number): string {
-  let best = TIDE_STATIONS[0];
+  const stations = tideStationsGrid as GridStation[];
+  let bestCode = stations[0].code;
   let bestD = Infinity;
-  for (const s of (tideStationsMaster as Array<{ code: string; name: string; lat: number; lng: number; nx: number; ny: number; sea: string }>)) {
+  for (const s of stations) {
     const d = Math.sqrt((s.nx - nx) ** 2 + (s.ny - ny) ** 2);
     if (d < bestD) {
       bestD = d;
-      best = s as unknown as TideStation;
+      bestCode = s.code;
     }
   }
-  return best.code;
+  return bestCode;
 }
 
 // 좌표 기반 해역 추정 (제주권 포함 4분류)

@@ -112,17 +112,7 @@ export function getPointDetail(id: string): PointDetailData {
 
 
 // Color thresholds (in m/s for wind, m for wave)
-export function windColor(ms: number) {
-  if (ms <= 7) return "hsl(142 70% 40%)";
-  if (ms <= 14) return "hsl(40 95% 50%)";
-  return "hsl(0 75% 52%)";
-}
-
-export function waveColor(m: number) {
-  if (m <= 0.5) return "hsl(142 70% 40%)";
-  if (m <= 1.5) return "hsl(40 95% 50%)";
-  return "hsl(0 75% 52%)";
-}
+export { windColor, waveColor } from "@/lib/chart-colors";
 
 // Build a smooth 24h tide curve from high/low events using cosine interpolation
 function parseHHMM(t: string): number {

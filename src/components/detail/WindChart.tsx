@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { Navigation } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { windColor } from "@/lib/point-detail-data";
+import { windColor, WIND_COLORS, SUN_BAND_COLORS, TIMELINE_COLORS } from "@/lib/chart-colors";
 import { getSunInfo } from "@/lib/sun.functions";
 import { buildSunBands, bandFill, bandOpacity } from "@/lib/sun-bands";
 import { getVillageForecastTimeline, getVillageForecast, type VillageForecastHour } from "@/lib/forecast.functions";
@@ -26,9 +26,12 @@ interface ChartPoint {
   t: number;
   hourOfDay: number;
   speed: number;
+  speedUltra: number | null;  // 초단기예보 구간
+  speedShort: number | null;  // 단기예보 구간
   gust: number;
   dir: number;
   dirLabel: string;
+  source: "ultra" | "short";
 }
 
 function degToLabel(deg: number): string {
@@ -37,16 +40,28 @@ function degToLabel(deg: number): string {
 }
 
 function buildData(timeline: VillageForecastHour[]): ChartPoint[] {
-  return timeline
-    .filter((h) => h.wsd != null)
-    .map((h) => ({
+  const filtered = timeline.filter((h) => h.wsd != null);
+
+  // ultra 마지막 인덱스 찾기 (경계점 연결용)
+  const lastUltraIdx = filtered.reduce((acc, h, i) => h.source === "ultra" ? i : acc, -1);
+
+  return filtered.map((h, i) => {
+    const speed = h.wsd ?? 0;
+    const isUltra = h.source === "ultra";
+    const isBoundary = i === lastUltraIdx + 1; // ultra 직후 첫 short 포인트 (연결선용)
+
+    return {
       t: h.hour,
       hourOfDay: h.hour % 24,
-      speed: h.wsd ?? 0,
-      gust: Math.round(((h.wsd ?? 0) * 1.3) * 10) / 10,
+      speed,
+      speedUltra: isUltra ? speed : (isBoundary ? speed : null), // 경계점 포함
+      speedShort: !isUltra ? speed : null,
+      gust: Math.round((speed * 1.3) * 10) / 10,
       dir: h.vec ?? 0,
       dirLabel: degToLabel(h.vec ?? 0),
-    }));
+      source: h.source,
+    };
+  });
 }
 
 function nowHour(): number {
@@ -130,7 +145,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
     refetchOnWindowFocus: false,
   });
 
-  // 초단기실황 현재값
   const { data: currentFcst } = useQuery({
     queryKey: ["fcst", point?.nx, point?.ny],
     queryFn: () => getVillageForecast({ nx: point!.nx, ny: point!.ny }),
@@ -163,24 +177,24 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   const arrowEvery = range === 1 ? 1 : 2;
 
-  // 드래그 중이면 timeline 값, 아니면 초단기실황 현재값
   const activePoint = useMemo(() => {
     if (isDragging || !currentFcst?.wsd) {
-      // 탐색 중이거나 실황 없으면 timeline에서 가장 가까운 값
       if (!data.length) return null;
       return data.reduce(
         (best, p) => Math.abs(p.t - activeT) < Math.abs(best.t - activeT) ? p : best,
         data[0],
       );
     }
-    // 실황값 표시 (현재 탐색선 위치)
     return {
       t: currentNow,
       hourOfDay: Math.floor(currentNow),
       speed: currentFcst.wsd,
+      speedUltra: currentFcst.wsd,
+      speedShort: null,
       gust: Math.round((currentFcst.wsd * 1.3) * 10) / 10,
       dir: currentFcst.vec ?? 0,
       dirLabel: degToLabel(currentFcst.vec ?? 0),
+      source: "ultra" as const,
     };
   }, [isDragging, currentFcst, data, activeT, currentNow]);
 
@@ -202,6 +216,29 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const activeHourInt = Math.floor(activeT);
   const activeMin = Math.round((activeT - activeHourInt) * 60);
   const activeTimeStr = `${String(activeHourInt).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
+
+  // 화살표 dot 렌더러 (두 Line 공용)
+  const renderDot = (props: unknown, sourceFilter: "ultra" | "short") => {
+    const { cx, cy, payload, index } = props as {
+      cx: number; cy: number; payload: ChartPoint; index: number;
+    };
+    if (index % arrowEvery !== 0) return <g key={index} />;
+    if (sourceFilter === "ultra" && !payload.speedUltra) return <g key={index} />;
+    if (sourceFilter === "short" && !payload.speedShort) return <g key={index} />;
+    const color = windColor(payload.speed);
+    return (
+      <g key={index} transform={`translate(${cx}, ${cy - 16}) rotate(${payload.dir + 180})`}>
+        <circle r={9} fill="white" stroke={color} strokeWidth={1.5} />
+        <path
+          d="M0,-5 L3.5,4 L0,2 L-3.5,4 Z"
+          fill={color}
+          stroke={color}
+          strokeWidth={1}
+          strokeLinejoin="round"
+        />
+      </g>
+    );
+  };
 
   return (
     <Card className="p-4 bg-white shadow-md overflow-hidden">
@@ -297,13 +334,13 @@ export default function WindChart({ pointId }: { pointId: string }) {
             })}
             <ReferenceLine
               x={currentNow}
-              stroke="hsl(0 0% 15%)"
+              stroke={TIMELINE_COLORS.current}
               strokeWidth={1.5}
               strokeDasharray="4 3"
             />
             <ReferenceLine
               x={activeT}
-              stroke="hsl(217 80% 50%)"
+              stroke={TIMELINE_COLORS.active}
               strokeWidth={2}
               label={(props: { viewBox?: { x?: number; y?: number } }) => {
                 const x = props.viewBox?.x ?? 0;
@@ -312,7 +349,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
                 const h = 18;
                 return (
                   <g>
-                    <rect x={x - w / 2} y={y} width={w} height={h} rx={9} ry={9} fill="hsl(217 80% 50%)" />
+                    <rect x={x - w / 2} y={y} width={w} height={h} rx={9} ry={9} fill={TIMELINE_COLORS.active} />
                     <text x={x} y={y + h / 2 + 4} textAnchor="middle" fontSize={10} fontWeight="600" fill="white">
                       {activeTimeStr}
                     </text>
@@ -344,62 +381,57 @@ export default function WindChart({ pointId }: { pointId: string }) {
               domain={[0, "dataMax + 3"]}
             />
             <Tooltip content={() => null} isAnimationActive={false} cursor={false} />
+
+            {/* 단기예보 선 — 연하게 */}
             <Line
               type="monotone"
-              dataKey="speed"
+              dataKey="speedShort"
               stroke="var(--primary)"
               strokeWidth={2.5}
+              strokeOpacity={0.35}
               isAnimationActive={false}
               activeDot={false}
-              dot={(props) => {
-                const { cx, cy, payload, index } = props as {
-                  cx: number;
-                  cy: number;
-                  payload: ChartPoint;
-                  index: number;
-                };
-                if (index % arrowEvery !== 0) return <g key={index} />;
-                const color = windColor(payload.speed);
-                return (
-                  <g key={index} transform={`translate(${cx}, ${cy - 16}) rotate(${payload.dir + 180})`}>
-                    <circle r={9} fill="white" stroke={color} strokeWidth={1.5} />
-                    <path
-                      d="M0,-5 L3.5,4 L0,2 L-3.5,4 Z"
-                      fill={color}
-                      stroke={color}
-                      strokeWidth={1}
-                      strokeLinejoin="round"
-                    />
-                  </g>
-                );
-              }}
+              connectNulls={false}
+              dot={(props) => renderDot(props, "short")}
+            />
+            {/* 초단기예보 선 — 진하게 (위에 그려서 덮음) */}
+            <Line
+              type="monotone"
+              dataKey="speedUltra"
+              stroke="var(--primary)"
+              strokeWidth={2.5}
+              strokeOpacity={1}
+              isAnimationActive={false}
+              activeDot={false}
+              connectNulls={false}
+              dot={(props) => renderDot(props, "ultra")}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground flex-wrap">
-        <LegendDot color="hsl(142 70% 40%)" label="≤5.6m/s" />
-        <LegendDot color="hsl(40 95% 50%)" label="≤10m/s" />
-        <LegendDot color="hsl(0 75% 52%)" label=">10m/s" />
+        <LegendDot color={WIND_COLORS.safe} label="출조가능 (≤5.6m/s)" />
+        <LegendDot color={WIND_COLORS.caution} label="주의 (≤10m/s)" />
+        <LegendDot color={WIND_COLORS.danger} label="경고 (>10m/s)" />
         <span className="flex items-center gap-1">
           <span className="flex overflow-hidden rounded" style={{ width: "24px", height: "12px" }}>
-            <span className="flex-1" style={{ background: "hsl(45 95% 65% / 0.5)" }} />
-            <span className="flex-1" style={{ background: "hsl(30 90% 60% / 0.5)" }} />
+            <span className="flex-1" style={{ background: `${SUN_BAND_COLORS.dawn}80` }} />
+            <span className="flex-1" style={{ background: `${SUN_BAND_COLORS.dusk}80` }} />
           </span>
           일출/일몰
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded bg-muted-foreground/20 border border-border" />
+          <span className="w-3 h-3 rounded border border-border" style={{ background: "hsl(270 60% 55% / 0.3)" }} />
           야간
         </span>
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-1">
-            <span className="w-4 border-t-2 border-dashed border-foreground/40" />
+            <span className="w-4 border-t-2 border-dashed" style={{ borderColor: TIMELINE_COLORS.current }} />
             현재
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-4 border-t-2 border-[hsl(217_80%_50%)]" />
+            <span className="w-4 border-t-2" style={{ borderColor: TIMELINE_COLORS.active }} />
             탐색
           </span>
         </span>

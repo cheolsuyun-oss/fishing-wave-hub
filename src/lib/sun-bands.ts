@@ -37,11 +37,13 @@ export function buildSunBands(
   return bands;
 }
 
+import { SUN_BAND_COLORS } from "@/lib/chart-colors";
+
 export function bandFill(type: SunBand["type"]): string {
   switch (type) {
-    case "dawn": return "hsl(45 95% 65%)";
-    case "dusk": return "hsl(30 90% 60%)";
-    case "night": return "var(--muted-foreground)";
+    case "dawn": return SUN_BAND_COLORS.dawn;
+    case "dusk": return SUN_BAND_COLORS.dusk;
+    case "night": return SUN_BAND_COLORS.night;
     default: return "transparent";
   }
 }

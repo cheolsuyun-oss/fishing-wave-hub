@@ -23,6 +23,7 @@ export type VillageForecastHour = {
   vec: number | null;
   pop: number | null;
   wav: number | null;
+  source: "ultra" | "short"; // 초단기예보 vs 단기예보
 };
 
 type FcstItem = {
@@ -41,7 +42,6 @@ type NcstItem = {
 
 const TTL_MS = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; data: VillageForecast }>();
-// timelineCache 제거 — React Query가 캐싱 담당
 
 function pickBase(): { baseDate: string; baseTime: string } {
   const nowKst = new Date(Date.now() + 9 * 3600_000 - 15 * 60_000);
@@ -101,7 +101,7 @@ function currentKstHHMM(): string {
   return `${String(nowKst.getUTCHours()).padStart(2, "0")}00`;
 }
 
-// 1단계: 초단기실황 (현재 실측값, 파고 없음)
+// 1단계: 초단기실황
 async function fetchNcst(nx: number, ny: number): Promise<Partial<VillageForecast> | null> {
   const apiKey = import.meta.env.VITE_KMA_API_KEY;
   if (!apiKey) return null;
@@ -141,7 +141,7 @@ async function fetchNcst(nx: number, ny: number): Promise<Partial<VillageForecas
   }
 }
 
-// 2단계: 초단기예보 (6시간 이내, 파고 포함)
+// 2단계: 초단기예보
 async function fetchUltraShort(nx: number, ny: number): Promise<Partial<VillageForecast> | null> {
   const apiKey = import.meta.env.VITE_KMA_API_KEY;
   if (!apiKey) return null;
@@ -185,7 +185,7 @@ async function fetchUltraShort(nx: number, ny: number): Promise<Partial<VillageF
   }
 }
 
-// 3단계: 단기예보 (72시간, 강수확률+파고 포함)
+// 3단계: 단기예보 (72시간)
 async function fetchItems(nx: number, ny: number): Promise<FcstItem[]> {
   const apiKey = import.meta.env.VITE_KMA_API_KEY;
   if (!apiKey) return [];
@@ -223,10 +223,8 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
   };
 
   try {
-    // 1단계: 초단기실황 시도
     const ncst = await fetchNcst(data.nx, data.ny);
 
-    // 파고는 실황에 없으므로 단기예보에서 별도 조회
     let wav: number | null = null;
     let pop: number | null = null;
     try {
@@ -247,7 +245,6 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
     } catch { /* 파고 조회 실패해도 계속 진행 */ }
 
     if (ncst) {
-      // 1단계 성공: 실황값 + 파고/강수확률은 단기예보에서
       const result: VillageForecast = {
         nx: data.nx, ny: data.ny,
         fcstDate: ncst.fcstDate ?? "",
@@ -255,15 +252,13 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
         tmp: ncst.tmp ?? null,
         wsd: ncst.wsd ?? null,
         vec: ncst.vec ?? null,
-        pop,
-        wav,
+        pop, wav,
         fetchedAt: now,
       };
       cache.set(key, { at: now, data: result });
       return result;
     }
 
-    // 2단계: 초단기예보 시도
     const ultra = await fetchUltraShort(data.nx, data.ny);
     if (ultra) {
       const result: VillageForecast = {
@@ -281,7 +276,6 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
       return result;
     }
 
-    // 3단계: 단기예보 폴백
     const items = await fetchItems(data.nx, data.ny);
     const targetHHMM = currentKstHHMM();
     const uniqTimes = Array.from(new Set(items.map((i) => `${i.fcstDate}${i.fcstTime}`))).sort();
@@ -314,10 +308,11 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
   const stationCode = nearestStationCodeByGrid(nx, ny);
 
   const now = new Date();
-  const from = new Date(now.getTime() - 1 * 3600_000).toISOString(); // 1시간 전부터
-  const toDate = new Date(now.getTime() + 72 * 3600_000);
+  const from = new Date(now.getTime() - 1 * 3600_000).toISOString();
+  const toDate = new Date(now.getTime() + 6 * 3600_000); // 6시간치만
   const toStr = toDate.toISOString();
-  const todayStr = `${new Date(Date.now() + 9 * 3600_000).getUTCFullYear()}-${String(new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1).padStart(2, "0")}-${String(new Date(Date.now() + 9 * 3600_000).getUTCDate()).padStart(2, "0")}`;
+  const todayKst = new Date(Date.now() + 9 * 3600_000);
+  const todayStr = `${todayKst.getUTCFullYear()}-${String(todayKst.getUTCMonth() + 1).padStart(2, "0")}-${String(todayKst.getUTCDate()).padStart(2, "0")}`;
 
   const { data, error } = await supabase
     .from("ultra_short_forecasts")
@@ -326,18 +321,15 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
     .gte("forecast_dt", from)
     .lte("forecast_dt", toStr)
     .order("forecast_dt", { ascending: true })
-    .limit(200);
+    .limit(12);
 
-  console.log("[Supabase]", stationCode, { from, toStr, count: data?.length, error });
+  if (error || !data || data.length < 3) return [];
 
-  if (error || !data || data.length < 6) return [];
-
-  const todayKst = new Date(Date.now() + 9 * 3600_000);
   const d0 = new Date(`${todayStr}T00:00:00+09:00`);
 
   return data.map((row) => {
     const dt = new Date(row.forecast_dt);
-    const hourOfDay = dt.getUTCHours(); // KST+9 저장이므로 UTC시간 = KST
+    const hourOfDay = dt.getUTCHours();
     const fcstDate = `${dt.getUTCFullYear()}${String(dt.getUTCMonth() + 1).padStart(2, "0")}${String(dt.getUTCDate()).padStart(2, "0")}`;
     const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
     const dayDiff = Math.round((dt.getTime() - d0.getTime()) / 86400000);
@@ -350,43 +342,16 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
       tmp: row.temp ?? null,
       wsd: row.wind_speed ?? null,
       vec: row.wind_dir ?? null,
-      pop: null, // 초단기예보에 없음, 단기예보 폴백에서 채움
-      wav: null, // 초단기예보에 없음, 단기예보 폴백에서 채움
+      pop: null,
+      wav: null,
+      source: "ultra" as const,
     };
   });
 }
 
 export async function getVillageForecastTimeline(data: { nx: number; ny: number }): Promise<VillageForecastHour[]> {
-  const now = Date.now();
-  const key = `${data.nx},${data.ny}`;
-
   try {
-    // 1단계: Supabase 초단기예보 데이터 시도
-    const sbTimeline = await getTimelineFromSupabase(data.nx, data.ny);
-
-    if (sbTimeline.length >= 6) {
-      // Supabase 데이터로 기본 timeline 구성 후, pop/wav는 단기예보에서 보완
-      try {
-        const items = await fetchItems(data.nx, data.ny);
-        const pick = (cat: string, fcstDate: string, fcstTime: string) => {
-          const it = items.find((i) => i.category === cat && i.fcstDate === fcstDate && i.fcstTime === fcstTime);
-          if (!it) return null;
-          const n = Number(it.fcstValue);
-          return Number.isFinite(n) ? n : null;
-        };
-        const merged = sbTimeline.map((row) => ({
-          ...row,
-          pop: pick("POP", row.fcstDate, row.fcstTime),
-          wav: pick("WAV", row.fcstDate, row.fcstTime),
-        }));
-        return merged;
-      } catch {
-        // pop/wav 보완 실패해도 Supabase 데이터만으로 반환
-        return sbTimeline;
-      }
-    }
-
-    // 2단계: Supabase 데이터 부족 시 KMA API 폴백
+    // 단기예보 72시간 (기본 베이스)
     const items = await fetchItems(data.nx, data.ny);
 
     const todayKst = new Date(Date.now() + 9 * 3600_000);
@@ -401,7 +366,7 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
       return Number.isFinite(n) ? n : null;
     };
 
-    const timeline: VillageForecastHour[] = uniqKeys.map((k) => {
+    const shortTimeline: VillageForecastHour[] = uniqKeys.map((k) => {
       const fcstDate = k.slice(0, 8);
       const fcstTime = k.slice(8);
       const hourOfDay = parseInt(fcstTime.slice(0, 2), 10);
@@ -411,18 +376,32 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
       const hour = dayDiff * 24 + hourOfDay;
 
       return {
-        fcstDate,
-        fcstTime,
-        hour,
+        fcstDate, fcstTime, hour,
         tmp: pick("TMP", fcstDate, fcstTime),
         wsd: pick("WSD", fcstDate, fcstTime),
         vec: pick("VEC", fcstDate, fcstTime),
         pop: pick("POP", fcstDate, fcstTime),
         wav: pick("WAV", fcstDate, fcstTime),
+        source: "short" as const,
       };
     });
 
-    return timeline;
+    // Supabase 초단기예보 6시간치로 앞부분 덮어쓰기
+    try {
+      const ultraTimeline = await getTimelineFromSupabase(data.nx, data.ny);
+      if (ultraTimeline.length >= 3) {
+        const ultraHours = new Set(ultraTimeline.map((r) => r.hour));
+        const merged = shortTimeline.map((row) =>
+          ultraHours.has(row.hour)
+            ? ultraTimeline.find((u) => u.hour === row.hour)!
+            : row
+        );
+        return merged;
+      }
+    } catch { /* Supabase 실패 시 단기예보만 반환 */ }
+
+    return shortTimeline;
+
   } catch (err) {
     console.error("KMA timeline failed:", err);
     return [];
