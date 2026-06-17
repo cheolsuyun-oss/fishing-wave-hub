@@ -24,7 +24,6 @@ import { getCustomPointsSync, useCustomPoints } from "@/lib/custom-points-store"
 import { getPointDetail } from "@/lib/point-detail-data";
 import { getTidePredict, type TideEvent } from "@/lib/tide.functions";
 import { getVillageForecast } from "@/lib/forecast.functions";
-import { saveUltraShortForecast } from "@/lib/ultra-short-forecast";
 import { formatFcstBasis } from "@/lib/geo";
 import type { TideEventProp } from "@/components/detail/TideChart";
 
@@ -131,13 +130,6 @@ function PointDetail() {
     refetchOnWindowFocus: false,
   });
 
-  useQuery({
-    queryKey: ["ultraShort", point?.id ?? "none", point?.nx ?? 0, point?.ny ?? 0],
-    queryFn: () => saveUltraShortForecast({ pointId: point!.id, nx: point!.nx, ny: point!.ny }),
-    enabled: !!point,
-    staleTime: 60 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
 
   const { data: fcst } = useQuery({
     queryKey: ["fcst", point?.nx ?? 0, point?.ny ?? 0],
