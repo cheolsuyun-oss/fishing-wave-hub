@@ -23,7 +23,7 @@ export type VillageForecastHour = {
   vec: number | null;
   pop: number | null;
   wav: number | null;
-  source: "ultra" | "short"; // 초단기예보 vs 단기예보
+  source: "ultra" | "short";
 };
 
 type FcstItem = {
@@ -43,62 +43,72 @@ type NcstItem = {
 const TTL_MS = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; data: VillageForecast }>();
 
+function kstNow(): Date {
+  return new Date(Date.now() + 9 * 3600_000);
+}
+
+function kstYMD(d: Date): string {
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function kstHH(d: Date): number {
+  return d.getUTCHours();
+}
+
+function kstMM(d: Date): number {
+  return d.getUTCMinutes();
+}
+
 function pickBase(): { baseDate: string; baseTime: string } {
-  const nowKst = new Date(Date.now() + 9 * 3600_000 - 15 * 60_000);
+  const now = kstNow();
   const slots = [23, 20, 17, 14, 11, 8, 5, 2];
-  const h = nowKst.getUTCHours();
-  let baseHour = slots.find((s) => s <= h);
-  const date = new Date(nowKst);
+  const h = kstHH(now);
+  const m = kstMM(now);
+  // 발표시각 기준 15분 여유
+  const effectiveH = m >= 15 ? h : h - 1;
+  let baseHour = slots.find((s) => s <= ((effectiveH % 24 + 24) % 24));
+  const date = new Date(now);
   if (baseHour === undefined) {
     baseHour = 23;
     date.setUTCDate(date.getUTCDate() - 1);
   }
-  const yyyy = date.getUTCFullYear();
-  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(date.getUTCDate()).padStart(2, "0");
   return {
-    baseDate: `${yyyy}${mm}${dd}`,
+    baseDate: kstYMD(date),
     baseTime: `${String(baseHour).padStart(2, "0")}00`,
   };
 }
 
 function pickNcstBase(): { baseDate: string; baseTime: string } {
-  const nowKst = new Date(Date.now() + 9 * 3600_000);
-  const h = nowKst.getUTCHours();
-  const m = nowKst.getUTCMinutes();
+  const now = kstNow();
+  const h = kstHH(now);
+  const m = kstMM(now);
   const baseHour = m >= 40 ? h : h - 1;
   const safeH = ((baseHour % 24) + 24) % 24;
-  const date = new Date(nowKst);
+  const date = new Date(now);
   if (m < 40 && h === 0) date.setUTCDate(date.getUTCDate() - 1);
-  const yyyy = date.getUTCFullYear();
-  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(date.getUTCDate()).padStart(2, "0");
   return {
-    baseDate: `${yyyy}${mm}${dd}`,
+    baseDate: kstYMD(date),
     baseTime: `${String(safeH).padStart(2, "0")}00`,
   };
 }
 
 function pickUltraShortBase(): { baseDate: string; baseTime: string } {
-  const nowKst = new Date(Date.now() + 9 * 3600_000);
-  const h = nowKst.getUTCHours();
-  const m = nowKst.getUTCMinutes();
+  const now = kstNow();
+  const h = kstHH(now);
+  const m = kstMM(now);
   const baseHour = m >= 30 ? h : h - 1;
   const safeH = ((baseHour % 24) + 24) % 24;
-  const date = new Date(nowKst);
+  const date = new Date(now);
   if (m < 30 && h === 0) date.setUTCDate(date.getUTCDate() - 1);
-  const yyyy = date.getUTCFullYear();
-  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(date.getUTCDate()).padStart(2, "0");
   return {
-    baseDate: `${yyyy}${mm}${dd}`,
+    baseDate: kstYMD(date),
     baseTime: `${String(safeH).padStart(2, "0")}30`,
   };
 }
 
 function currentKstHHMM(): string {
-  const nowKst = new Date(Date.now() + 9 * 3600_000);
-  return `${String(nowKst.getUTCHours()).padStart(2, "0")}00`;
+  const now = kstNow();
+  return `${String(kstHH(now)).padStart(2, "0")}00`;
 }
 
 // 1단계: 초단기실황
@@ -307,54 +317,53 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
 async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageForecastHour[]> {
   const stationCode = nearestStationCodeByGrid(nx, ny);
 
-  const now = new Date();
-  const from = new Date(now.getTime() - 0.5 * 3600_000).toISOString(); // 30분 전부터
-  const toDate = new Date(now.getTime() + 6 * 3600_000);
-  const toStr = toDate.toISOString();
-  const todayKst = new Date(Date.now() + 9 * 3600_000);
-  const todayStr = `${todayKst.getUTCFullYear()}-${String(todayKst.getUTCMonth() + 1).padStart(2, "0")}-${String(todayKst.getUTCDate()).padStart(2, "0")}`;
+  const now = kstNow();
+  const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+
+  // 조회 범위: 30분 전 ~ 6시간 후 (KST 기준 ISO 문자열, +09:00 명시)
+  const fromKst = new Date(now.getTime() - 30 * 60_000);
+  const toKst = new Date(now.getTime() + 6 * 3600_000);
+
+  function toKstIso(d: Date): string {
+    const y = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dy = String(d.getUTCDate()).padStart(2, "0");
+    const h = String(d.getUTCHours()).padStart(2, "0");
+    const mi = String(d.getUTCMinutes()).padStart(2, "0");
+    return `${y}-${mo}-${dy}T${h}:${mi}:00+09:00`;
+  }
 
   const { data, error } = await supabase
     .from("ultra_short_forecasts")
     .select("forecast_dt, wind_speed, wind_dir, temp, precip_1h")
     .eq("station_code", stationCode)
-    .gte("forecast_dt", from)
-    .lte("forecast_dt", toStr)
+    .gte("forecast_dt", toKstIso(fromKst))
+    .lte("forecast_dt", toKstIso(toKst))
     .order("forecast_dt", { ascending: true })
     .limit(12);
 
   if (error || !data || data.length < 1) return [];
 
-  // KST 오늘 자정을 ms로: todayStr은 KST 날짜
-  const d0Ms = Date.UTC(
-    parseInt(todayStr.slice(0, 4)),
-    parseInt(todayStr.slice(5, 7)) - 1,
-    parseInt(todayStr.slice(8, 10)),
-    -9, 0, 0  // KST 00:00 = UTC -9:00 = 전날 15:00
-  );
-  const d0 = new Date(d0Ms);
-
   return data.map((row) => {
-    // forecast_dt는 "+00" UTC로 저장됨. KST = UTC+9
-    const utcMs = new Date(row.forecast_dt).getTime();
-    const kstHour = Math.floor((utcMs % 86400000) / 3600000 + 9) % 24;
-    const utcDate = new Date(utcMs);
-    const kstDateStr = (() => {
-      const kstMs = utcMs + 9 * 3600_000;
-      const d = new Date(kstMs);
-      return `${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,"0")}${String(d.getUTCDate()).padStart(2,"0")}`;
-    })();
-    const hourOfDay = kstHour;
+    // Supabase는 항상 UTC로 반환: "2026-06-18 13:00:00+00"
+    // UTC ms → KST = UTC + 9시간
+    const utcMs = new Date(row.forecast_dt as string).getTime();
+    const kstMs = utcMs + 9 * 3600_000;
+    const kstDate = new Date(kstMs);
+    const hourOfDay = kstDate.getUTCHours();
+    const kstDateStr = `${kstDate.getUTCFullYear()}${String(kstDate.getUTCMonth() + 1).padStart(2, "0")}${String(kstDate.getUTCDate()).padStart(2, "0")}`;
     const fcstDate = kstDateStr;
     const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
-    // dayDiff: KST 날짜 기준으로 오늘(todayStr)과의 차이
-    const kstY = parseInt(kstDateStr.slice(0,4));
-    const kstM = parseInt(kstDateStr.slice(4,6)) - 1;
-    const kstD = parseInt(kstDateStr.slice(6,8));
-    const todayY = parseInt(todayStr.slice(0,4));
-    const todayM = parseInt(todayStr.slice(5,7)) - 1;
-    const todayD = parseInt(todayStr.slice(8,10));
-    const dayDiff = Math.round((Date.UTC(kstY,kstM,kstD) - Date.UTC(todayY,todayM,todayD)) / 86400000);
+
+    const kstY = parseInt(kstDateStr.slice(0, 4));
+    const kstM = parseInt(kstDateStr.slice(4, 6)) - 1;
+    const kstD = parseInt(kstDateStr.slice(6, 8));
+    const todayY = parseInt(todayStr.slice(0, 4));
+    const todayM = parseInt(todayStr.slice(5, 7)) - 1;
+    const todayD = parseInt(todayStr.slice(8, 10));
+    const dayDiff = Math.round(
+      (Date.UTC(kstY, kstM, kstD) - Date.UTC(todayY, todayM, todayD)) / 86400000
+    );
     const hour = dayDiff * 24 + hourOfDay;
 
     return {
@@ -376,8 +385,9 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
     // 단기예보 72시간 (기본 베이스)
     const items = await fetchItems(data.nx, data.ny);
 
-    const todayKst = new Date(Date.now() + 9 * 3600_000);
-    const todayStr = `${todayKst.getUTCFullYear()}${String(todayKst.getUTCMonth() + 1).padStart(2, "0")}${String(todayKst.getUTCDate()).padStart(2, "0")}`;
+    const now = kstNow();
+    const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+    const todayStrCompact = kstYMD(now); // "20260618"
 
     const uniqKeys = Array.from(new Set(items.map((i) => `${i.fcstDate}${i.fcstTime}`))).sort();
 
@@ -392,9 +402,15 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
       const fcstDate = k.slice(0, 8);
       const fcstTime = k.slice(8);
       const hourOfDay = parseInt(fcstTime.slice(0, 2), 10);
-      const d1 = new Date(`${fcstDate.slice(0,4)}-${fcstDate.slice(4,6)}-${fcstDate.slice(6,8)}`);
-      const d0 = new Date(`${todayStr.slice(0,4)}-${todayStr.slice(4,6)}-${todayStr.slice(6,8)}`);
-      const dayDiff = Math.round((d1.getTime() - d0.getTime()) / 86400000);
+
+      // 날짜 비교: 순수 문자열 → Date.UTC로 dayDiff 계산
+      const fY = parseInt(fcstDate.slice(0, 4));
+      const fM = parseInt(fcstDate.slice(4, 6)) - 1;
+      const fD = parseInt(fcstDate.slice(6, 8));
+      const tY = parseInt(todayStr.slice(0, 4));
+      const tM = parseInt(todayStr.slice(5, 7)) - 1;
+      const tD = parseInt(todayStr.slice(8, 10));
+      const dayDiff = Math.round((Date.UTC(fY, fM, fD) - Date.UTC(tY, tM, tD)) / 86400000);
       const hour = dayDiff * 24 + hourOfDay;
 
       return {
