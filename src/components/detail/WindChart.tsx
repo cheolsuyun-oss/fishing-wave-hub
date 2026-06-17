@@ -171,7 +171,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   const sunBands = useMemo(() => {
     const sr = sunInfo?.sunrise ?? 5.5;
-    const ss = sunInfo?.sunset ?? 19.5;
+    const ss = sunInfo?.sunset ?? 19.0;
     return buildSunBands(sr, ss, range);
   }, [sunInfo, range]);
 
@@ -226,9 +226,9 @@ export default function WindChart({ pointId }: { pointId: string }) {
     if (sourceFilter === "ultra" && !payload.speedUltra) return <g key={index} />;
     if (sourceFilter === "short" && !payload.speedShort) return <g key={index} />;
     const color = windColor(payload.speed);
+    const opacity = sourceFilter === "short" ? 0.5 : 1;
     return (
-      <g key={index} transform={`translate(${cx}, ${cy - 16}) rotate(${payload.dir + 180})`}>
-        <circle r={9} fill="white" stroke={color} strokeWidth={1.5} />
+      <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180})`} opacity={opacity}>
         <path
           d="M0,-5 L3.5,4 L0,2 L-3.5,4 Z"
           fill={color}
@@ -360,7 +360,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
             <XAxis
               dataKey="t"
               type="number"
-              domain={[0, range * 24 - 1]}
+              domain={[0, range * 24]}
               ticks={
                 range === 1
                   ? [0, 6, 12, 18]
