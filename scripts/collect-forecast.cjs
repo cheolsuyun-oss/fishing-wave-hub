@@ -69,7 +69,7 @@ async function collectPoint(point) {
     };
   });
 
-  const sbRes = await fetch(SB_URL + "/rest/v1/ultra_short_forecasts", {
+  const sbRes = await fetch(SB_URL + "/rest/v1/ultra_short_forecasts?on_conflict=station_code,forecast_dt", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

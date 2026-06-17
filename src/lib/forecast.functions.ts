@@ -308,8 +308,8 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
   const stationCode = nearestStationCodeByGrid(nx, ny);
 
   const now = new Date();
-  const from = new Date(now.getTime() - 1 * 3600_000).toISOString();
-  const toDate = new Date(now.getTime() + 6 * 3600_000); // 6시간치만
+  const from = new Date(now.getTime() - 0.5 * 3600_000).toISOString(); // 30분 전부터
+  const toDate = new Date(now.getTime() + 6 * 3600_000);
   const toStr = toDate.toISOString();
   const todayKst = new Date(Date.now() + 9 * 3600_000);
   const todayStr = `${todayKst.getUTCFullYear()}-${String(todayKst.getUTCMonth() + 1).padStart(2, "0")}-${String(todayKst.getUTCDate()).padStart(2, "0")}`;
@@ -323,7 +323,7 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
     .order("forecast_dt", { ascending: true })
     .limit(12);
 
-  if (error || !data || data.length < 3) return [];
+  if (error || !data || data.length < 1) return [];
 
   const d0 = new Date(`${todayStr}T00:00:00+09:00`);
 
@@ -389,7 +389,7 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
     // Supabase 초단기예보 6시간치로 앞부분 덮어쓰기
     try {
       const ultraTimeline = await getTimelineFromSupabase(data.nx, data.ny);
-      if (ultraTimeline.length >= 3) {
+      if (ultraTimeline.length >= 1) {
         const ultraHours = new Set(ultraTimeline.map((r) => r.hour));
         const merged = shortTimeline.map((row) =>
           ultraHours.has(row.hour)
