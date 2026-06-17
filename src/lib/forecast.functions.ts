@@ -325,14 +325,36 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
 
   if (error || !data || data.length < 1) return [];
 
-  const d0 = new Date(`${todayStr}T00:00:00+09:00`);
+  // KST 오늘 자정을 ms로: todayStr은 KST 날짜
+  const d0Ms = Date.UTC(
+    parseInt(todayStr.slice(0, 4)),
+    parseInt(todayStr.slice(5, 7)) - 1,
+    parseInt(todayStr.slice(8, 10)),
+    -9, 0, 0  // KST 00:00 = UTC -9:00 = 전날 15:00
+  );
+  const d0 = new Date(d0Ms);
 
   return data.map((row) => {
-    const dt = new Date(row.forecast_dt);
-    const hourOfDay = dt.getUTCHours();
-    const fcstDate = `${dt.getUTCFullYear()}${String(dt.getUTCMonth() + 1).padStart(2, "0")}${String(dt.getUTCDate()).padStart(2, "0")}`;
+    // forecast_dt는 "+00" UTC로 저장됨. KST = UTC+9
+    const utcMs = new Date(row.forecast_dt).getTime();
+    const kstHour = Math.floor((utcMs % 86400000) / 3600000 + 9) % 24;
+    const utcDate = new Date(utcMs);
+    const kstDateStr = (() => {
+      const kstMs = utcMs + 9 * 3600_000;
+      const d = new Date(kstMs);
+      return `${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,"0")}${String(d.getUTCDate()).padStart(2,"0")}`;
+    })();
+    const hourOfDay = kstHour;
+    const fcstDate = kstDateStr;
     const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
-    const dayDiff = Math.round((dt.getTime() - d0.getTime()) / 86400000);
+    // dayDiff: KST 날짜 기준으로 오늘(todayStr)과의 차이
+    const kstY = parseInt(kstDateStr.slice(0,4));
+    const kstM = parseInt(kstDateStr.slice(4,6)) - 1;
+    const kstD = parseInt(kstDateStr.slice(6,8));
+    const todayY = parseInt(todayStr.slice(0,4));
+    const todayM = parseInt(todayStr.slice(5,7)) - 1;
+    const todayD = parseInt(todayStr.slice(8,10));
+    const dayDiff = Math.round((Date.UTC(kstY,kstM,kstD) - Date.UTC(todayY,todayM,todayD)) / 86400000);
     const hour = dayDiff * 24 + hourOfDay;
 
     return {
