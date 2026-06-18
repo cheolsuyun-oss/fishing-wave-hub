@@ -36,7 +36,7 @@ export async function getSunInfo(lat: number, lng: number): Promise<SunInfo> {
 
   const locdate = todayKst();
   const url = new URL(
-    "https://apis.data.go.kr/B090041/openapi/service/RiseSetInfoService/getLCRiseSetInfo",
+    "http://apis.data.go.kr/B090041/openapi/service/RiseSetInfoService/getLCRiseSetInfo",
   );
   url.searchParams.set("serviceKey", apiKey);
   url.searchParams.set("locdate", locdate);
@@ -50,8 +50,8 @@ export async function getSunInfo(lat: number, lng: number): Promise<SunInfo> {
     const text = await res.text();
 
     // XML 파싱 (간단하게 정규식으로)
-    const sunrise = text.match(/<sunrise>(\d{4})<\/sunrise>/)?.[1];
-    const sunset = text.match(/<sunset>(\d{4})<\/sunset>/)?.[1];
+    const sunrise = text.match(/<sunrise>\s*(\d{4})\s*<\/sunrise>/)?.[1];
+    const sunset = text.match(/<sunset>\s*(\d{4})\s*<\/sunset>/)?.[1];
 
     if (!sunrise || !sunset) throw new Error("파싱 실패");
 
