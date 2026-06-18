@@ -1,27 +1,43 @@
+const fs = require("fs");
+const path = require("path");
+
+// 로컬 .env 로드 (GitHub Actions에서는 Secrets로 주입됨)
+const envPath = path.join(__dirname, "../.env");
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, "utf8").split("\n").forEach((line) => {
+    const [k, ...v] = line.split("=");
+    if (k && v.length) process.env[k.trim()] = v.join("=").trim();
+  });
+}
+
 const POINTS = require("../src/data/tide-stations-grid.json");
 
 const KMA_KEY = process.env.KMA_API_KEY;
-const SB_URL = process.env.SUPABASE_URL;
-const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SB_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 function kstNow() {
   return new Date(Date.now() + 9 * 3600000);
 }
 
 function baseTime() {
-  const now = kstNow();
+  const now = kstNow(); // UTC+9 기준 Date (getUTCHours()로 KST 시각 읽기)
   const h = now.getUTCHours();
   const m = now.getUTCMinutes();
-  const bh = m >= 30 ? h : h - 1;
-  const safeH = ((bh % 24) + 24) % 24;
-  const date = new Date(now);
-  if (m < 30 && h === 0) date.setUTCDate(date.getUTCDate() - 1);
+  // 30분 미만이면 이전 발표시각 사용
+  let bh = m >= 30 ? h : h - 1;
+  let date = new Date(now);
+  // 자정 이전(h=0, m<30)이면 전날 23:30 발표로
+  if (bh < 0) {
+    bh = 23;
+    date.setUTCDate(date.getUTCDate() - 1);
+  }
   const yyyy = date.getUTCFullYear();
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(date.getUTCDate()).padStart(2, "0");
   return {
     date: yyyy + mm + dd,
-    time: String(safeH).padStart(2, "0") + "30",
+    time: String(bh).padStart(2, "0") + "30",
   };
 }
 
@@ -38,7 +54,18 @@ async function collectPoint(point) {
   url.searchParams.set("ny", String(point.ny));
 
   const res = await fetch(url.toString());
-  const json = await res.json();
+  const text = await res.text();
+  if (!text || text.trim() === "") {
+    console.log("EMPTY RESPONSE for", point.code);
+    return;
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    console.log("JSON PARSE ERROR for", point.code, ":", text.slice(0, 200));
+    return;
+  }
   const items = json?.response?.body?.items?.item ?? [];
   if (!items.length) {
     console.log("no items for", point.code);
@@ -80,8 +107,8 @@ async function collectPoint(point) {
     body: JSON.stringify(rows),
   });
 
-  const result = await sbRes.json();
-  console.log(point.code, sbRes.status, JSON.stringify(result).slice(0, 100));
+  const sbText = await sbRes.text();
+  console.log(point.code, sbRes.status, sbText.slice(0, 200));
 }
 
 async function collectChunk(chunk) {
