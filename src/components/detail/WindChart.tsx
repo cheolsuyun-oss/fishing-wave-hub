@@ -19,23 +19,24 @@ import { getVillageForecastTimeline, getVillageForecast, type VillageForecastHou
 import { useQuery } from "@tanstack/react-query";
 import { getPoint } from "@/lib/points";
 import { getCustomPointsSync } from "@/lib/custom-points-store";
+import { nearestStationCodeByGrid } from "@/lib/geo";
+import { supabase } from "@/lib/supabase";
 
 type Range = 1 | 3;
 
-// 시간 구간별 색상
 const ZONE_COLORS = {
-  past: "hsl(0 0% 15%)",   // 검정색 — 과거~현재 (실황 영역, 추후 실황 데이터로 대체 예정)
-  near: "hsl(217 91% 45%)", // 파란색 — 현재~현재+6시간
-  far: "hsl(199 80% 65%)",  // 하늘색 — 그 이후
+  past: "hsl(0 0% 15%)",
+  near: "hsl(217 91% 45%)",
+  far: "hsl(199 80% 65%)",
 } as const;
 
 interface ChartPoint {
   t: number;
   hourOfDay: number;
   speed: number;
-  speedPast: number | null;  // 과거~현재
-  speedNear: number | null;  // 현재~현재+6h
-  speedFar: number | null;   // 현재+6h~
+  speedPast: number | null;
+  speedNear: number | null;
+  speedFar: number | null;
   gust: number;
   dir: number;
   dirLabel: string;
@@ -50,7 +51,6 @@ function degToLabel(deg: number): string {
 function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] {
   const filtered = timeline.filter((h) => h.wsd != null);
 
-  // 구간 경계: past(<nowT) / near(nowT ~ nowT+6) / far(>=nowT+6)
   const zoneOf = (t: number): "past" | "near" | "far" => {
     if (t < nowT) return "past";
     if (t < nowT + 6) return "near";
@@ -65,7 +65,6 @@ function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] 
     const prevZone = i > 0 ? zones[i - 1] : zone;
     const nextZone = i < zones.length - 1 ? zones[i + 1] : zone;
 
-    // 각 구간 라인은 자기 구간 + 인접 구간과 맞닿은 경계점만 값을 가짐 (끊김 없는 연결을 위해)
     const inPast = zone === "past" || (zone === "near" && prevZone === "past");
     const inNear = zone === "near" || (zone === "past" && nextZone === "near") || (zone === "far" && prevZone === "near");
     const inFar = zone === "far" || (zone === "near" && nextZone === "far");
@@ -88,6 +87,21 @@ function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] 
 function nowHour(): number {
   const kst = new Date(Date.now() + 9 * 3600_000);
   return kst.getUTCHours() + kst.getUTCMinutes() / 60;
+}
+
+async function traceClientRender(stationCode: string, windSpeed: number | null) {
+  try {
+    const kst = new Date(Date.now() + 9 * 3600_000);
+    const hourSlot = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}T${String(kst.getUTCHours()).padStart(2, "0")}:00:00+09:00`;
+    await supabase.from("debug_trace").insert({
+      trace_key: `${stationCode}|${hourSlot}`,
+      node: "client_render",
+      wind_speed: windSpeed,
+      note: "screen render",
+    });
+  } catch {
+    // ignore trace failure
+  }
 }
 
 function WindPropeller({ speed }: { speed: number }) {
@@ -217,6 +231,12 @@ export default function WindChart({ pointId }: { pointId: string }) {
     };
   }, [isDragging, currentFcst, data, activeT, currentNow]);
 
+  useEffect(() => {
+    if (isDragging || !point || !activePoint) return;
+    const stationCode = nearestStationCodeByGrid(point.nx, point.ny);
+    traceClientRender(stationCode, activePoint.speed);
+  }, [isDragging, point, activePoint]);
+
   const handleMove = (state: { activeLabel?: string | number }) => {
     if (state?.activeLabel !== undefined && state.activeLabel !== null) {
       const v = Number(state.activeLabel);
@@ -236,7 +256,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const activeMin = Math.round((activeT - activeHourInt) * 60);
   const activeTimeStr = `${String(activeHourInt).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
 
-  // 화살표 dot 렌더러 (세 Line 공용) — zone에 맞는 색상 사용
   const renderDot = (props: unknown, zoneKey: "speedPast" | "speedNear" | "speedFar", color: string) => {
     const { cx, cy, payload, index } = props as {
       cx: number; cy: number; payload: ChartPoint; index: number;
@@ -398,7 +417,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
             />
             <Tooltip content={() => null} isAnimationActive={false} cursor={false} />
 
-            {/* 과거~현재: 검정색 */}
             <Line
               type="monotone"
               dataKey="speedPast"
@@ -409,7 +427,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
               connectNulls={false}
               dot={(props) => renderDot(props, "speedPast", ZONE_COLORS.past)}
             />
-            {/* 현재~현재+6h: 파란색 */}
             <Line
               type="monotone"
               dataKey="speedNear"
@@ -420,7 +437,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
               connectNulls={false}
               dot={(props) => renderDot(props, "speedNear", ZONE_COLORS.near)}
             />
-            {/* 현재+6h 이후: 하늘색 */}
             <Line
               type="monotone"
               dataKey="speedFar"

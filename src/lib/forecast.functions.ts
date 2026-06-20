@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { nearestStationCodeByGrid } from "./geo";
+import { debugLog } from "./debug";
 
 export type VillageForecast = {
   nx: number;
@@ -64,7 +65,6 @@ function pickBase(): { baseDate: string; baseTime: string } {
   const slots = [23, 20, 17, 14, 11, 8, 5, 2];
   const h = kstHH(now);
   const m = kstMM(now);
-  // 발표시각 기준 15분 여유
   const effectiveH = m >= 15 ? h : h - 1;
   let baseHour = slots.find((s) => s <= ((effectiveH % 24 + 24) % 24));
   const date = new Date(now);
@@ -111,7 +111,6 @@ function currentKstHHMM(): string {
   return `${String(kstHH(now)).padStart(2, "0")}00`;
 }
 
-// 1단계: 초단기실황
 async function fetchNcst(nx: number, ny: number): Promise<Partial<VillageForecast> | null> {
   const apiKey = import.meta.env.VITE_KMA_API_KEY;
   if (!apiKey) return null;
@@ -151,7 +150,6 @@ async function fetchNcst(nx: number, ny: number): Promise<Partial<VillageForecas
   }
 }
 
-// 2단계: 초단기예보
 async function fetchUltraShort(nx: number, ny: number): Promise<Partial<VillageForecast> | null> {
   const apiKey = import.meta.env.VITE_KMA_API_KEY;
   if (!apiKey) return null;
@@ -195,7 +193,6 @@ async function fetchUltraShort(nx: number, ny: number): Promise<Partial<VillageF
   }
 }
 
-// 3단계: 단기예보 (72시간)
 async function fetchItems(nx: number, ny: number): Promise<FcstItem[]> {
   const apiKey = import.meta.env.VITE_KMA_API_KEY;
   if (!apiKey) return [];
@@ -314,52 +311,31 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
   }
 }
 
+async function traceDbQuery(stationCode: string, forecastDt: string, windSpeed: number | null, note?: string) {
+  try {
+    await supabase.from("debug_trace").insert({
+      trace_key: `${stationCode}|${forecastDt}`,
+      node: "db_query",
+      wind_speed: windSpeed,
+      note: note ?? null,
+    });
+  } catch {
+    // 트레이싱 실패는 조용히 무시 (로그인 안 한 상태 등)
+  }
+}
+
 async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageForecastHour[]> {
   const stationCode = nearestStationCodeByGrid(nx, ny);
-  console.log("[DEBUG] nx,ny:", nx, ny, "-> stationCode:", stationCode);
+  debugLog("forecast_pipeline", "nx,ny:", nx, ny, "-> stationCode:", stationCode);
 
   const now = kstNow();
   const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
 
-  // 조회 범위: 30분 전 ~ 6시간 후
-  // now는 (Date.now() + 9h)로 KST 벽시계를 흉내낸 값이므로,
-  // 실제 절대시각(UTC)으로 되돌리려면 9시간을 다시 빼야 한다.
   const realNowMs = now.getTime() - 9 * 3600_000;
   const fromUtcIso = new Date(realNowMs - 30 * 60_000).toISOString();
   const toUtcIso = new Date(realNowMs + 6 * 3600_000).toISOString();
 
-  console.log("[DEBUG] query range (UTC):", fromUtcIso, "~", toUtcIso);
-  console.log("[DEBUG] stationCode raw:", JSON.stringify(stationCode), "length:", stationCode.length);
-  console.log("[DEBUG] supabase url:", import.meta.env.VITE_SUPABASE_URL);
-  console.log("[DEBUG] anon key FULL:", import.meta.env.VITE_SUPABASE_ANON_KEY);
-
-  // 임시 진단 1: station_code 필터 없이 시간 범위만으로 조회
-  const diag = await supabase
-    .from("ultra_short_forecasts")
-    .select("station_code, forecast_dt")
-    .gte("forecast_dt", fromUtcIso)
-    .lte("forecast_dt", toUtcIso)
-    .limit(20);
-  console.log("[DEBUG] diag1 (no station filter) count:", diag.data?.length, "error:", diag.error);
-  console.log("[DEBUG] diag1 station_codes found:", diag.data?.map((r) => r.station_code));
-
-  // 임시 진단 2: 시간 필터 없이 SO_1260의 가장 최근 데이터 그냥 가져오기
-  const diag2 = await supabase
-    .from("ultra_short_forecasts")
-    .select("station_code, forecast_dt")
-    .eq("station_code", "SO_1260")
-    .order("forecast_dt", { ascending: false })
-    .limit(5);
-  console.log("[DEBUG] diag2 (no time filter, SO_1260) count:", diag2.data?.length, "error:", diag2.error);
-  console.log("[DEBUG] diag2 rows:", diag2.data);
-
-  // 임시 진단 3: 아무 필터도 없이 테이블 전체에서 5건만
-  const diag3 = await supabase
-    .from("ultra_short_forecasts")
-    .select("station_code, forecast_dt")
-    .limit(5);
-  console.log("[DEBUG] diag3 (no filter at all) count:", diag3.data?.length, "error:", diag3.error);
-  console.log("[DEBUG] diag3 rows:", diag3.data);
+  debugLog("forecast_pipeline", "query range (UTC):", fromUtcIso, "~", toUtcIso);
 
   const { data, error } = await supabase
     .from("ultra_short_forecasts")
@@ -371,14 +347,20 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
     .limit(12);
 
   if (error || !data || data.length < 1) {
-    console.log("[DEBUG] supabase ultra data:", data, "error:", error);
+    debugLog("forecast_pipeline", "supabase ultra data empty. error:", error);
+    await traceDbQuery(stationCode, fromUtcIso, null, error ? `조회 에러: ${error.message}` : "빈 결과");
     return [];
   }
-  console.log("[DEBUG] supabase ultra rows:", data.length, data.map((r) => r.forecast_dt));
+  debugLog("forecast_pipeline", "supabase ultra rows:", data.length, data.map((r) => r.forecast_dt));
+
+  const firstRow = data[0];
+  // client_render와 trace_key 형식을 맞추기 위해 UTC -> KST(+09:00)로 변환
+  const firstRowUtcMs = new Date(firstRow.forecast_dt as string).getTime();
+  const firstRowKst = new Date(firstRowUtcMs + 9 * 3600_000);
+  const firstRowKstIso = `${firstRowKst.getUTCFullYear()}-${String(firstRowKst.getUTCMonth() + 1).padStart(2, "0")}-${String(firstRowKst.getUTCDate()).padStart(2, "0")}T${String(firstRowKst.getUTCHours()).padStart(2, "0")}:00:00+09:00`;
+  await traceDbQuery(stationCode, firstRowKstIso, firstRow.wind_speed as number | null, "조회 성공");
 
   return data.map((row) => {
-    // Supabase는 항상 UTC로 반환: "2026-06-18 13:00:00+00"
-    // UTC ms → KST = UTC + 9시간
     const utcMs = new Date(row.forecast_dt as string).getTime();
     const kstMs = utcMs + 9 * 3600_000;
     const kstDate = new Date(kstMs);
@@ -414,12 +396,11 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
 
 export async function getVillageForecastTimeline(data: { nx: number; ny: number }): Promise<VillageForecastHour[]> {
   try {
-    // 단기예보 72시간 (기본 베이스)
     const items = await fetchItems(data.nx, data.ny);
 
     const now = kstNow();
     const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
-    const todayStrCompact = kstYMD(now); // "20260618"
+    const todayStrCompact = kstYMD(now);
 
     const uniqKeys = Array.from(new Set(items.map((i) => `${i.fcstDate}${i.fcstTime}`))).sort();
 
@@ -435,7 +416,6 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
       const fcstTime = k.slice(8);
       const hourOfDay = parseInt(fcstTime.slice(0, 2), 10);
 
-      // 날짜 비교: 순수 문자열 → Date.UTC로 dayDiff 계산
       const fY = parseInt(fcstDate.slice(0, 4));
       const fM = parseInt(fcstDate.slice(4, 6)) - 1;
       const fD = parseInt(fcstDate.slice(6, 8));
@@ -456,11 +436,10 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
       };
     });
 
-    // Supabase 초단기예보 6시간치로 앞부분 덮어쓰기
     try {
       const ultraTimeline = await getTimelineFromSupabase(data.nx, data.ny);
-      console.log("[DEBUG] ultraTimeline hours:", ultraTimeline.map((r) => r.hour));
-      console.log("[DEBUG] shortTimeline hours (first 10):", shortTimeline.slice(0, 10).map((r) => r.hour));
+      debugLog("forecast_pipeline", "ultraTimeline hours:", ultraTimeline.map((r) => r.hour));
+      debugLog("forecast_pipeline", "shortTimeline hours (first 10):", shortTimeline.slice(0, 10).map((r) => r.hour));
       if (ultraTimeline.length >= 1) {
         const ultraHours = new Set(ultraTimeline.map((r) => r.hour));
         const merged = shortTimeline.map((row) =>
@@ -470,7 +449,9 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
         );
         return merged;
       }
-    } catch (e) { console.log("[DEBUG] ultraTimeline fetch failed:", e); /* Supabase 실패 시 단기예보만 반환 */ }
+    } catch (e) {
+      debugLog("forecast_pipeline", "ultraTimeline fetch failed:", e);
+    }
 
     return shortTimeline;
 
