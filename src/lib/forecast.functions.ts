@@ -316,33 +316,65 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
 
 async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageForecastHour[]> {
   const stationCode = nearestStationCodeByGrid(nx, ny);
+  console.log("[DEBUG] nx,ny:", nx, ny, "-> stationCode:", stationCode);
 
   const now = kstNow();
   const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
 
-  // 조회 범위: 30분 전 ~ 6시간 후 (KST 기준 ISO 문자열, +09:00 명시)
-  const fromKst = new Date(now.getTime() - 30 * 60_000);
-  const toKst = new Date(now.getTime() + 6 * 3600_000);
+  // 조회 범위: 30분 전 ~ 6시간 후
+  // now는 (Date.now() + 9h)로 KST 벽시계를 흉내낸 값이므로,
+  // 실제 절대시각(UTC)으로 되돌리려면 9시간을 다시 빼야 한다.
+  const realNowMs = now.getTime() - 9 * 3600_000;
+  const fromUtcIso = new Date(realNowMs - 30 * 60_000).toISOString();
+  const toUtcIso = new Date(realNowMs + 6 * 3600_000).toISOString();
 
-  function toKstIso(d: Date): string {
-    const y = d.getUTCFullYear();
-    const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const dy = String(d.getUTCDate()).padStart(2, "0");
-    const h = String(d.getUTCHours()).padStart(2, "0");
-    const mi = String(d.getUTCMinutes()).padStart(2, "0");
-    return `${y}-${mo}-${dy}T${h}:${mi}:00+09:00`;
-  }
+  console.log("[DEBUG] query range (UTC):", fromUtcIso, "~", toUtcIso);
+  console.log("[DEBUG] stationCode raw:", JSON.stringify(stationCode), "length:", stationCode.length);
+  console.log("[DEBUG] supabase url:", import.meta.env.VITE_SUPABASE_URL);
+  console.log("[DEBUG] anon key FULL:", import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+  // 임시 진단 1: station_code 필터 없이 시간 범위만으로 조회
+  const diag = await supabase
+    .from("ultra_short_forecasts")
+    .select("station_code, forecast_dt")
+    .gte("forecast_dt", fromUtcIso)
+    .lte("forecast_dt", toUtcIso)
+    .limit(20);
+  console.log("[DEBUG] diag1 (no station filter) count:", diag.data?.length, "error:", diag.error);
+  console.log("[DEBUG] diag1 station_codes found:", diag.data?.map((r) => r.station_code));
+
+  // 임시 진단 2: 시간 필터 없이 SO_1260의 가장 최근 데이터 그냥 가져오기
+  const diag2 = await supabase
+    .from("ultra_short_forecasts")
+    .select("station_code, forecast_dt")
+    .eq("station_code", "SO_1260")
+    .order("forecast_dt", { ascending: false })
+    .limit(5);
+  console.log("[DEBUG] diag2 (no time filter, SO_1260) count:", diag2.data?.length, "error:", diag2.error);
+  console.log("[DEBUG] diag2 rows:", diag2.data);
+
+  // 임시 진단 3: 아무 필터도 없이 테이블 전체에서 5건만
+  const diag3 = await supabase
+    .from("ultra_short_forecasts")
+    .select("station_code, forecast_dt")
+    .limit(5);
+  console.log("[DEBUG] diag3 (no filter at all) count:", diag3.data?.length, "error:", diag3.error);
+  console.log("[DEBUG] diag3 rows:", diag3.data);
 
   const { data, error } = await supabase
     .from("ultra_short_forecasts")
     .select("forecast_dt, wind_speed, wind_dir, temp, precip_1h")
     .eq("station_code", stationCode)
-    .gte("forecast_dt", toKstIso(fromKst))
-    .lte("forecast_dt", toKstIso(toKst))
+    .gte("forecast_dt", fromUtcIso)
+    .lte("forecast_dt", toUtcIso)
     .order("forecast_dt", { ascending: true })
     .limit(12);
 
-  if (error || !data || data.length < 1) return [];
+  if (error || !data || data.length < 1) {
+    console.log("[DEBUG] supabase ultra data:", data, "error:", error);
+    return [];
+  }
+  console.log("[DEBUG] supabase ultra rows:", data.length, data.map((r) => r.forecast_dt));
 
   return data.map((row) => {
     // Supabase는 항상 UTC로 반환: "2026-06-18 13:00:00+00"
@@ -427,6 +459,8 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
     // Supabase 초단기예보 6시간치로 앞부분 덮어쓰기
     try {
       const ultraTimeline = await getTimelineFromSupabase(data.nx, data.ny);
+      console.log("[DEBUG] ultraTimeline hours:", ultraTimeline.map((r) => r.hour));
+      console.log("[DEBUG] shortTimeline hours (first 10):", shortTimeline.slice(0, 10).map((r) => r.hour));
       if (ultraTimeline.length >= 1) {
         const ultraHours = new Set(ultraTimeline.map((r) => r.hour));
         const merged = shortTimeline.map((row) =>
@@ -436,7 +470,7 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
         );
         return merged;
       }
-    } catch { /* Supabase 실패 시 단기예보만 반환 */ }
+    } catch (e) { console.log("[DEBUG] ultraTimeline fetch failed:", e); /* Supabase 실패 시 단기예보만 반환 */ }
 
     return shortTimeline;
 

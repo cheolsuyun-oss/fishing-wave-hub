@@ -22,12 +22,20 @@ import { getCustomPointsSync } from "@/lib/custom-points-store";
 
 type Range = 1 | 3;
 
+// 시간 구간별 색상
+const ZONE_COLORS = {
+  past: "hsl(0 0% 15%)",   // 검정색 — 과거~현재 (실황 영역, 추후 실황 데이터로 대체 예정)
+  near: "hsl(217 91% 45%)", // 파란색 — 현재~현재+6시간
+  far: "hsl(199 80% 65%)",  // 하늘색 — 그 이후
+} as const;
+
 interface ChartPoint {
   t: number;
   hourOfDay: number;
   speed: number;
-  speedUltra: number | null;  // 초단기예보 구간
-  speedShort: number | null;  // 단기예보 구간
+  speedPast: number | null;  // 과거~현재
+  speedNear: number | null;  // 현재~현재+6h
+  speedFar: number | null;   // 현재+6h~
   gust: number;
   dir: number;
   dirLabel: string;
@@ -39,23 +47,36 @@ function degToLabel(deg: number): string {
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
-function buildData(timeline: VillageForecastHour[]): ChartPoint[] {
+function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] {
   const filtered = timeline.filter((h) => h.wsd != null);
 
-  // ultra 마지막 인덱스 찾기 (경계점 연결용)
-  const lastUltraIdx = filtered.reduce((acc, h, i) => h.source === "ultra" ? i : acc, -1);
+  // 구간 경계: past(<nowT) / near(nowT ~ nowT+6) / far(>=nowT+6)
+  const zoneOf = (t: number): "past" | "near" | "far" => {
+    if (t < nowT) return "past";
+    if (t < nowT + 6) return "near";
+    return "far";
+  };
+
+  const zones = filtered.map((h) => zoneOf(h.hour));
 
   return filtered.map((h, i) => {
     const speed = h.wsd ?? 0;
-    const isUltra = h.source === "ultra";
-    const isBoundary = i === lastUltraIdx + 1; // ultra 직후 첫 short 포인트 (연결선용)
+    const zone = zones[i];
+    const prevZone = i > 0 ? zones[i - 1] : zone;
+    const nextZone = i < zones.length - 1 ? zones[i + 1] : zone;
+
+    // 각 구간 라인은 자기 구간 + 인접 구간과 맞닿은 경계점만 값을 가짐 (끊김 없는 연결을 위해)
+    const inPast = zone === "past" || (zone === "near" && prevZone === "past");
+    const inNear = zone === "near" || (zone === "past" && nextZone === "near") || (zone === "far" && prevZone === "near");
+    const inFar = zone === "far" || (zone === "near" && nextZone === "far");
 
     return {
       t: h.hour,
       hourOfDay: h.hour % 24,
       speed,
-      speedUltra: isUltra ? speed : (isBoundary ? speed : null), // 경계점 포함
-      speedShort: !isUltra ? speed : null,
+      speedPast: inPast ? speed : null,
+      speedNear: inNear ? speed : null,
+      speedFar: inFar ? speed : null,
       gust: Math.round((speed * 1.3) * 10) / 10,
       dir: h.vec ?? 0,
       dirLabel: degToLabel(h.vec ?? 0),
@@ -153,12 +174,12 @@ export default function WindChart({ pointId }: { pointId: string }) {
     refetchOnWindowFocus: false,
   });
 
-  const data = useMemo(() => {
-    const built = buildData(timeline);
-    return built.filter((d) => d.t < range * 24);
-  }, [timeline, range]);
-
   const currentNow = nowHour();
+
+  const data = useMemo(() => {
+    const built = buildData(timeline, currentNow);
+    return built.filter((d) => d.t < range * 24);
+  }, [timeline, range, currentNow]);
 
   useEffect(() => {
     if (point) getSunInfo(point.lat, point.lng).then(setSunInfo);
@@ -189,8 +210,6 @@ export default function WindChart({ pointId }: { pointId: string }) {
       t: currentNow,
       hourOfDay: Math.floor(currentNow),
       speed: currentFcst.wsd,
-      speedUltra: currentFcst.wsd,
-      speedShort: null,
       gust: Math.round((currentFcst.wsd * 1.3) * 10) / 10,
       dir: currentFcst.vec ?? 0,
       dirLabel: degToLabel(currentFcst.vec ?? 0),
@@ -217,18 +236,15 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const activeMin = Math.round((activeT - activeHourInt) * 60);
   const activeTimeStr = `${String(activeHourInt).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
 
-  // 화살표 dot 렌더러 (두 Line 공용)
-  const renderDot = (props: unknown, sourceFilter: "ultra" | "short") => {
+  // 화살표 dot 렌더러 (세 Line 공용) — zone에 맞는 색상 사용
+  const renderDot = (props: unknown, zoneKey: "speedPast" | "speedNear" | "speedFar", color: string) => {
     const { cx, cy, payload, index } = props as {
       cx: number; cy: number; payload: ChartPoint; index: number;
     };
     if (index % arrowEvery !== 0) return <g key={index} />;
-    if (sourceFilter === "ultra" && !payload.speedUltra) return <g key={index} />;
-    if (sourceFilter === "short" && !payload.speedShort) return <g key={index} />;
-    const color = windColor(payload.speed);
-    const opacity = sourceFilter === "short" ? 0.5 : 1;
+    if (!payload[zoneKey]) return <g key={index} />;
     return (
-      <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180})`} opacity={opacity}>
+      <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180})`}>
         <path
           d="M0,-5 L3.5,4 L0,2 L-3.5,4 Z"
           fill={color}
@@ -382,38 +398,47 @@ export default function WindChart({ pointId }: { pointId: string }) {
             />
             <Tooltip content={() => null} isAnimationActive={false} cursor={false} />
 
-            {/* 단기예보 선 — 연하게 */}
+            {/* 과거~현재: 검정색 */}
             <Line
               type="monotone"
-              dataKey="speedShort"
-              stroke="var(--primary)"
+              dataKey="speedPast"
+              stroke={ZONE_COLORS.past}
               strokeWidth={2.5}
-              strokeOpacity={0.35}
               isAnimationActive={false}
               activeDot={false}
               connectNulls={false}
-              dot={(props) => renderDot(props, "short")}
+              dot={(props) => renderDot(props, "speedPast", ZONE_COLORS.past)}
             />
-            {/* 초단기예보 선 — 진하게 (위에 그려서 덮음) */}
+            {/* 현재~현재+6h: 파란색 */}
             <Line
               type="monotone"
-              dataKey="speedUltra"
-              stroke="var(--primary)"
+              dataKey="speedNear"
+              stroke={ZONE_COLORS.near}
               strokeWidth={2.5}
-              strokeOpacity={1}
               isAnimationActive={false}
               activeDot={false}
               connectNulls={false}
-              dot={(props) => renderDot(props, "ultra")}
+              dot={(props) => renderDot(props, "speedNear", ZONE_COLORS.near)}
+            />
+            {/* 현재+6h 이후: 하늘색 */}
+            <Line
+              type="monotone"
+              dataKey="speedFar"
+              stroke={ZONE_COLORS.far}
+              strokeWidth={2.5}
+              isAnimationActive={false}
+              activeDot={false}
+              connectNulls={false}
+              dot={(props) => renderDot(props, "speedFar", ZONE_COLORS.far)}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground flex-wrap">
-        <LegendDot color={WIND_COLORS.safe} label="출조가능 (≤5.6m/s)" />
-        <LegendDot color={WIND_COLORS.caution} label="주의 (≤10m/s)" />
-        <LegendDot color={WIND_COLORS.danger} label="경고 (>10m/s)" />
+        <LegendDot color={ZONE_COLORS.past} label="과거~현재" />
+        <LegendDot color={ZONE_COLORS.near} label="현재~+6시간" />
+        <LegendDot color={ZONE_COLORS.far} label="그 이후" />
         <span className="flex items-center gap-1">
           <span className="flex overflow-hidden rounded" style={{ width: "24px", height: "12px" }}>
             <span className="flex-1" style={{ background: `${SUN_BAND_COLORS.dawn}80` }} />

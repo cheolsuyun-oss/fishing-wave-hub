@@ -22,11 +22,27 @@ import { getPointDetail } from "@/lib/point-detail-data";
 
 type Level = "safe" | "caution" | "danger";
 
-const METRIC_INFO: Record<string, string> = {
-  풍속: "출조가능 ≤5.6 m/s\n주의 5.6~10 m/s\n출조불가 >10 m/s",
-  파고: "출조가능 ≤0.5 m\n주의 0.5~1.4 m\n출조불가 >1.4 m",
-  강수: "출조가능 ≤30%\n주의 30~60%\n출조불가 >60%",
-  기온: "출조가능 15~25°C\n주의 5~14 / 26~30°C\n출조불가 ≤4 / ≥31°C",
+const METRIC_INFO_MAP: Record<string, { label: string; color: string; text: string }[]> = {
+  풍속: [
+    { label: "출조가능", color: "text-blue-600", text: "≤5.6 m/s" },
+    { label: "주의", color: "text-orange-500", text: "5.6~10 m/s" },
+    { label: "출조불가", color: "text-red-600", text: ">10 m/s" },
+  ],
+  파고: [
+    { label: "출조가능", color: "text-blue-600", text: "≤0.5 m" },
+    { label: "주의", color: "text-orange-500", text: "0.5~1.4 m" },
+    { label: "출조불가", color: "text-red-600", text: ">1.4 m" },
+  ],
+  강수: [
+    { label: "출조가능", color: "text-blue-600", text: "≤30%" },
+    { label: "주의", color: "text-orange-500", text: "30~60%" },
+    { label: "출조불가", color: "text-red-600", text: ">60%" },
+  ],
+  기온: [
+    { label: "출조가능", color: "text-blue-600", text: "15~25°C" },
+    { label: "주의", color: "text-orange-500", text: "5~14 / 26~30°C" },
+    { label: "출조불가", color: "text-red-600", text: "≤4 / ≥31°C" },
+  ],
 };
 
 function tideSummary(events: TideEvent[]): { type: "high" | "low"; time: string; inText: string } | null {
@@ -99,6 +115,8 @@ export function PointCard({
   const overallLevel = getOverallLevel(windLevel, waveLevel, rainLevel, tempLevel);
   const risk = RISK_META[overallLevel];
 
+  const [flippedMetric, setFlippedMetric] = useState<string | null>(null);
+
   const apiHighs = tide?.events.filter((e) => e.type === "high") ?? [];
   const apiLows = tide?.events.filter((e) => e.type === "low") ?? [];
   const hasApiTide = apiHighs.length + apiLows.length > 0;
@@ -138,10 +156,26 @@ export function PointCard({
           }</p>
 
           <div className="grid grid-cols-4 gap-2 text-center">
-            <Metric icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s" level={windLevel} />
-            <Metric icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m" level={waveLevel} />
-            <Metric icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%" level={rainLevel} />
-            <Metric icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°" level={tempLevel} />
+            <Metric
+              icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s" level={windLevel}
+              flipped={flippedMetric === "풍속"}
+              onToggle={() => setFlippedMetric((cur) => (cur === "풍속" ? null : "풍속"))}
+            />
+            <Metric
+              icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m" level={waveLevel}
+              flipped={flippedMetric === "파고"}
+              onToggle={() => setFlippedMetric((cur) => (cur === "파고" ? null : "파고"))}
+            />
+            <Metric
+              icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%" level={rainLevel}
+              flipped={flippedMetric === "강수"}
+              onToggle={() => setFlippedMetric((cur) => (cur === "강수" ? null : "강수"))}
+            />
+            <Metric
+              icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°" level={tempLevel}
+              flipped={flippedMetric === "기온"}
+              onToggle={() => setFlippedMetric((cur) => (cur === "기온" ? null : "기온"))}
+            />
           </div>
 
           <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
@@ -222,69 +256,85 @@ function Metric({
   value,
   unit,
   level,
+  flipped,
+  onToggle,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   unit: string;
   level?: Level;
+  flipped: boolean;
+  onToggle: () => void;
 }) {
-  const [showInfo, setShowInfo] = useState(false);
-
   const bg =
-    level === "danger" ? "bg-red-100 border-red-300" :
-    level === "caution" ? "bg-yellow-100 border-yellow-300" :
-    level === "safe" ? "bg-sky-100 border-sky-300" :
+    level === "danger" ? "bg-pink-100 border-red-300" :
+    level === "caution" ? "bg-yellow-100 border-orange-300" :
+    level === "safe" ? "bg-sky-100 border-blue-300" :
     "bg-muted border-border";
 
+  const accentText =
+    level === "danger" ? "text-red-600" :
+    level === "caution" ? "text-orange-600" :
+    level === "safe" ? "text-blue-600" :
+    "text-foreground";
+
   return (
-    <div className={`relative rounded-xl border py-2.5 ${bg}`}>
-      {/* ⓘ 버튼 */}
+    <div
+      className="relative"
+      style={{ perspective: "600px" }}
+    >
       <button
         type="button"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setShowInfo((v) => !v);
+          onToggle();
         }}
-        className="absolute top-1 right-1 text-muted-foreground/50 hover:text-muted-foreground"
-        aria-label="기준 보기"
+        aria-label={flipped ? "값으로 돌아가기" : "기준 보기"}
+        className="relative w-full text-left"
+        style={{
+          height: "104px",
+          transformStyle: "preserve-3d",
+          transition: "transform 0.5s",
+          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+        }}
       >
-        <Info className="w-3 h-3" />
-      </button>
-
-      {/* 툴팁 */}
-      {showInfo && (
+        {/* 앞면: 값 */}
         <div
-          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-popover border border-border rounded-lg shadow-lg px-3 py-2 text-left whitespace-pre text-[10px] text-foreground leading-relaxed"
-          style={{ minWidth: "130px" }}
+          className={`absolute inset-0 rounded-xl border flex flex-col items-center justify-center ${bg}`}
+          style={{ backfaceVisibility: "hidden" }}
         >
-          <div className="font-semibold mb-1 text-[11px]">{label} 기준</div>
-          <span className="text-sky-600">● </span>출조가능<br />
-          <span className="text-yellow-500">● </span>주의<br />
-          <span className="text-red-500">● </span>출조불가
-          <div className="mt-1.5 border-t border-border pt-1.5 text-muted-foreground whitespace-pre">
-            {METRIC_INFO[label]}
+          <Info className="absolute top-1 right-1 w-3 h-3 text-muted-foreground/50" />
+          <div className={`flex items-center justify-center mb-1 ${accentText}`}>
+            {icon}
           </div>
-          {/* 말풍선 꼬리 */}
-          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0"
-            style={{
-              borderLeft: "5px solid transparent",
-              borderRight: "5px solid transparent",
-              borderTop: "5px solid var(--border)",
-            }}
-          />
+          <div className={`text-[10px] text-center font-medium ${accentText}`}>{label}</div>
+          <div className="text-sm font-bold text-foreground mt-0.5 text-center">
+            {value}
+            <span className="text-[10px] font-medium text-muted-foreground ml-0.5">{unit}</span>
+          </div>
         </div>
-      )}
 
-      <div className="flex items-center justify-center text-primary mb-1">
-        {icon}
-      </div>
-      <div className="text-[10px] text-muted-foreground">{label}</div>
-      <div className="text-sm font-bold text-foreground mt-0.5">
-        {value}
-        <span className="text-[10px] font-medium text-muted-foreground ml-0.5">{unit}</span>
-      </div>
+        {/* 뒷면: 기준표 */}
+        <div
+          className="absolute inset-0 rounded-xl border py-1.5 px-1.5 bg-popover border-border flex flex-col justify-center"
+          style={{
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+        >
+          <div className="font-semibold text-[9px] text-foreground text-center mb-1">{label} 기준</div>
+          {METRIC_INFO_MAP[label]?.map((row) => (
+            <div key={row.label} className="text-[8.5px] leading-tight text-foreground">
+              <span className={row.color}>● </span>
+              {row.label}
+              <br />
+              <span className="pl-2.5">{row.text}</span>
+            </div>
+          ))}
+        </div>
+      </button>
     </div>
   );
 }

@@ -64,15 +64,15 @@ export const POINTS: FishingPoint[] = [
 export const RISK_META: Record<RiskLevel, { label: string; className: string }> = {
   safe: {
     label: "출조가능",
-    className: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    className: "bg-sky-100 text-blue-600 border-blue-300",
   },
   caution: {
     label: "주의",
-    className: "bg-amber-100 text-amber-700 border-amber-200",
+    className: "bg-yellow-100 text-orange-600 border-orange-300",
   },
   danger: {
     label: "출조불가",
-    className: "bg-red-100 text-red-700 border-red-200",
+    className: "bg-pink-100 text-red-600 border-red-300",
   },
 };
 
