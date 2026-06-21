@@ -1,6 +1,5 @@
 import type { FishingPoint } from "./points";
-import tideStationsMaster from "../data/tide-stations-master.json";
-import tideStationsGrid from "../data/tide-stations-grid.json";
+import { supabase } from "./supabase";
 
 // Haversine distance in meters
 export function haversine(
@@ -60,15 +59,119 @@ export function latLngToGrid(lat: number, lng: number): { nx: number; ny: number
   return { nx, ny };
 }
 
-// 조석 관측소 (기상청 조석예보(고저조) 오픈API 활용가이드 기준, 172개)
-type TideStation = { code: string; name: string; lat: number; lng: number; sea: FishingPoint["sea"] };
+// 조석 관측소 — Supabase tide_station_regions 테이블 기반 (29차 세션, JSON 파일 대체)
+export type TideStationRegion = {
+  station_code: string;
+  lat: number;
+  lng: number;
+  nx: number;
+  ny: number;
+  sido: string | null;
+  sigungu: string | null;
+  address_etc: string | null;
+  sea: FishingPoint["sea"]; // 한글: 동해/서해/남해/제주
+  sea_etc: string | null; // 한글: 북부/중부/남부/서부/동부
+  mid_land_ta_reg_id: string | null;
+  mid_sea_reg_id: string | null;
+  note: string | null;
+};
 
-const TIDE_STATIONS: TideStation[] = tideStationsMaster as TideStation[];
+const LOCAL_CACHE_KEY = "tide_station_regions_cache";
+const LOCAL_CACHE_VERSION_KEY = "tide_station_regions_cache_version";
+const APP_DATA_VERSION_KEY = "tide_stations"; // app_data_versions.key
 
-export function nearestTideStation(lat: number, lng: number) {
-  let best = TIDE_STATIONS[0];
+let memoryCache: TideStationRegion[] | null = null;
+
+// app_data_versions 테이블의 현재 버전 조회
+async function fetchRemoteVersion(): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("app_data_versions")
+    .select("version")
+    .eq("key", APP_DATA_VERSION_KEY)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.version as number;
+}
+
+// tide_station_regions 전체 조회 (172건)
+async function fetchAllStationRegions(): Promise<TideStationRegion[]> {
+  const { data, error } = await supabase
+    .from("tide_station_regions")
+    .select(
+      "station_code, lat, lng, nx, ny, sido, sigungu, address_etc, sea, sea_etc, mid_land_ta_reg_id, mid_sea_reg_id, note",
+    );
+  if (error || !data) return [];
+  return data as TideStationRegion[];
+}
+
+/**
+ * 172개 관측소 데이터를 반환. 다음 우선순위로 가져온다:
+ * 1) 메모리 캐시 (같은 세션 내 재호출)
+ * 2) localStorage 캐시 (버전 일치 시)
+ * 3) Supabase 재조회 (버전 불일치 또는 캐시 없음 시) → localStorage 갱신
+ *
+ * 비로그인 상태(RLS로 인해 조회 결과가 빈 배열)인 경우 빈 배열을 반환한다.
+ * 호출부는 빈 배열일 때 기존 하드코딩 샘플 포인트(묵호/대천/통영) 흐름으로 폴백해야 한다.
+ */
+export async function getStationRegions(): Promise<TideStationRegion[]> {
+  if (memoryCache) return memoryCache;
+
+  const remoteVersion = await fetchRemoteVersion();
+
+  // 버전 조회 실패 시(비로그인 등) 로컬 캐시가 있으면 일단 그것을 사용
+  if (remoteVersion === null) {
+    const cached = readLocalCache();
+    if (cached) {
+      memoryCache = cached;
+      return cached;
+    }
+    return [];
+  }
+
+  const localVersion = Number(localStorage.getItem(LOCAL_CACHE_VERSION_KEY) ?? "0");
+  if (localVersion === remoteVersion) {
+    const cached = readLocalCache();
+    if (cached) {
+      memoryCache = cached;
+      return cached;
+    }
+  }
+
+  // 버전 불일치 또는 캐시 없음 → 재조회
+  const fresh = await fetchAllStationRegions();
+  if (fresh.length > 0) {
+    memoryCache = fresh;
+    try {
+      localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(fresh));
+      localStorage.setItem(LOCAL_CACHE_VERSION_KEY, String(remoteVersion));
+    } catch {
+      // localStorage 용량 초과 등은 무시 (메모리 캐시는 유지됨)
+    }
+  }
+  return fresh;
+}
+
+function readLocalCache(): TideStationRegion[] | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as TideStationRegion[];
+  } catch {
+    return null;
+  }
+}
+
+// 위경도 기준 가장 가까운 관측소 반환 (비로그인 등으로 데이터 없으면 null)
+export async function nearestTideStation(
+  lat: number,
+  lng: number,
+): Promise<TideStationRegion | null> {
+  const stations = await getStationRegions();
+  if (stations.length === 0) return null;
+
+  let best = stations[0];
   let bestD = Infinity;
-  for (const s of TIDE_STATIONS) {
+  for (const s of stations) {
     const d = haversine(lat, lng, s.lat, s.lng);
     if (d < bestD) {
       bestD = d;
@@ -78,26 +181,27 @@ export function nearestTideStation(lat: number, lng: number) {
   return best;
 }
 
-// nx/ny 격자 기준으로 가장 가까운 관측소 code 반환
-import tideStationsGrid from "../data/tide-stations-grid.json";
+// nx/ny 격자 기준으로 가장 가까운 관측소 station_code 반환 (없으면 null)
+export async function nearestStationCodeByGrid(
+  nx: number,
+  ny: number,
+): Promise<string | null> {
+  const stations = await getStationRegions();
+  if (stations.length === 0) return null;
 
-type GridStation = { code: string; nx: number; ny: number };
-
-export function nearestStationCodeByGrid(nx: number, ny: number): string {
-  const stations = tideStationsGrid as GridStation[];
-  let bestCode = stations[0].code;
+  let bestCode = stations[0].station_code;
   let bestD = Infinity;
   for (const s of stations) {
     const d = Math.sqrt((s.nx - nx) ** 2 + (s.ny - ny) ** 2);
     if (d < bestD) {
       bestD = d;
-      bestCode = s.code;
+      bestCode = s.station_code;
     }
   }
   return bestCode;
 }
 
-// 좌표 기반 해역 추정 (제주권 포함 4분류)
+// 좌표 기반 해역 추정 (제주권 포함 4분류) — 신규 포인트 등록 시 DB 매칭 전 임시 추정용으로 유지
 export function inferSea(lat: number, lng: number): FishingPoint["sea"] {
   // 제주 본섬 및 인근 도서 (대략 위도 33~34.3, 경도 126.0~127.0 권역 + 이어도)
   if (lat < 34.3 && lng < 127.0 && lng > 124.5) return "제주";

@@ -325,8 +325,13 @@ async function traceDbQuery(stationCode: string, forecastDt: string, windSpeed: 
 }
 
 async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageForecastHour[]> {
-  const stationCode = nearestStationCodeByGrid(nx, ny);
+  const stationCode = await nearestStationCodeByGrid(nx, ny);
   debugLog("forecast_pipeline", "nx,ny:", nx, ny, "-> stationCode:", stationCode);
+
+  if (!stationCode) {
+    debugLog("forecast_pipeline", "stationCode null — 관측소 매칭 실패, 빈 배열 반환");
+    return [];
+  }
 
   const now = kstNow();
   const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
@@ -441,11 +446,13 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
       debugLog("forecast_pipeline", "ultraTimeline hours:", ultraTimeline.map((r) => r.hour));
       debugLog("forecast_pipeline", "shortTimeline hours (first 10):", shortTimeline.slice(0, 10).map((r) => r.hour));
       if (ultraTimeline.length >= 1) {
-        const ultraHours = new Set(ultraTimeline.map((r) => r.hour));
-        const merged = shortTimeline.map((row) =>
-          ultraHours.has(row.hour)
-            ? ultraTimeline.find((u) => u.hour === row.hour)!
-            : row
+        const shortByHour = new Map(shortTimeline.map((row) => [row.hour, row]));
+        const ultraByHour = new Map(ultraTimeline.map((row) => [row.hour, row]));
+        const allHours = Array.from(
+          new Set([...shortByHour.keys(), ...ultraByHour.keys()]),
+        ).sort((a, b) => a - b);
+        const merged = allHours.map(
+          (hour) => ultraByHour.get(hour) ?? shortByHour.get(hour)!,
         );
         return merged;
       }

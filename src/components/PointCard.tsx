@@ -1,5 +1,5 @@
 ﻿import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Wind, Waves, CloudRain, Thermometer, ChevronRight, X, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -81,10 +81,16 @@ function getOverallLevel(windLevel: Level, waveLevel: Level, rainLevel: Level, t
 export function PointCard({
   point,
   onRemove,
+  requireAuth = false,
 }: {
   point: FishingPoint;
   onRemove?: (id: string) => void;
+  /** true면 비로그인 모드 — 카드/상세보기 클릭 시 회원가입 안내, X버튼은 onRemove 미전달로 자동 숨김 */
+  requireAuth?: boolean;
 }) {
+  const navigate = useNavigate();
+  const [signupPromptOpen, setSignupPromptOpen] = useState(false);
+
   const { data: fcst } = useQuery({
     queryKey: ["fcst", point.nx, point.ny],
     queryFn: () => getVillageForecast({ nx: point.nx, ny: point.ny }),
@@ -127,99 +133,113 @@ export function PointCard({
   const nextEvent = tideSummary(tide?.events ?? []);
   const tideRange = computeRange(tide?.events ?? []);
 
+  const cardInner = (
+    <Card className="p-4 bg-white shadow-md hover:shadow-lg transition-shadow active:scale-[0.99]">
+      <div className="flex items-baseline justify-between mb-1">
+        <h3 className="text-base font-semibold text-foreground pr-6">
+          {point.name}
+        </h3>
+        <Badge
+          variant="outline"
+          className={`${risk.className} font-semibold px-2.5 py-0.5 mr-7 whitespace-nowrap`}
+        >
+          {risk.label}
+        </Badge>
+      </div>
+
+      <p className="text-xs text-muted-foreground mb-3">{
+        overallLevel === "danger"
+          ? "출조가 불가능한 날씨입니다."
+          : overallLevel === "caution"
+          ? "출조 시 주의가 필요한 날씨입니다."
+          : "낚시하기에 좋은 날씨입니다."
+      }</p>
+
+      <div className="grid grid-cols-4 gap-2 text-center">
+        <Metric
+          icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s" level={windLevel}
+          flipped={flippedMetric === "풍속"}
+          onToggle={() => setFlippedMetric((cur) => (cur === "풍속" ? null : "풍속"))}
+        />
+        <Metric
+          icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m" level={waveLevel}
+          flipped={flippedMetric === "파고"}
+          onToggle={() => setFlippedMetric((cur) => (cur === "파고" ? null : "파고"))}
+        />
+        <Metric
+          icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%" level={rainLevel}
+          flipped={flippedMetric === "강수"}
+          onToggle={() => setFlippedMetric((cur) => (cur === "강수" ? null : "강수"))}
+        />
+        <Metric
+          icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°" level={tempLevel}
+          flipped={flippedMetric === "기온"}
+          onToggle={() => setFlippedMetric((cur) => (cur === "기온" ? null : "기온"))}
+        />
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-lg bg-red-50 px-3 py-2">
+          <span className="text-red-700 font-semibold">만조</span>{" "}
+          <span className="text-foreground">
+            {tideLoading ? "…" : (tideHighs[0]?.time ?? "-")}
+          </span>
+        </div>
+        <div className="rounded-lg bg-blue-50 px-3 py-2">
+          <span className="text-blue-700 font-semibold">간조</span>{" "}
+          <span className="text-foreground">
+            {tideLoading ? "…" : (tideLows[0]?.time ?? "-")}
+          </span>
+        </div>
+      </div>
+
+      {(nextEvent || tideRange) && (
+        <div className="mt-2 text-[11px] text-muted-foreground flex items-center justify-between">
+          {nextEvent && (
+            <span>
+              다음 {nextEvent.type === "high" ? "만조" : "간조"} {nextEvent.time}
+              {" "}
+              <span className="text-foreground/70">({nextEvent.inText})</span>
+            </span>
+          )}
+          {tideRange && (
+            <span>
+              조수차{" "}
+              <span className="font-semibold text-foreground">
+                {(tideRange / 100).toFixed(2)}m
+              </span>
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center justify-end text-xs text-primary font-medium">
+        상세보기 <ChevronRight className="w-3.5 h-3.5" />
+      </div>
+    </Card>
+  );
+
   return (
     <div className="relative">
-      <Link
-        to="/points/$id"
-        params={{ id: point.id }}
-        className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
-      >
-        <Card className="p-4 bg-white shadow-md hover:shadow-lg transition-shadow active:scale-[0.99]">
-          <div className="flex items-baseline justify-between mb-1">
-            <h3 className="text-base font-semibold text-foreground pr-6">
-              {point.name}
-            </h3>
-            <Badge
-              variant="outline"
-              className={`${risk.className} font-semibold px-2.5 py-0.5 mr-7 whitespace-nowrap`}
-            >
-              {risk.label}
-            </Badge>
-          </div>
+      {requireAuth ? (
+        <button
+          type="button"
+          onClick={() => setSignupPromptOpen(true)}
+          className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+        >
+          {cardInner}
+        </button>
+      ) : (
+        <Link
+          to="/points/$id"
+          params={{ id: point.id }}
+          className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+        >
+          {cardInner}
+        </Link>
+      )}
 
-          <p className="text-xs text-muted-foreground mb-3">{
-            overallLevel === "danger"
-              ? "출조가 불가능한 날씨입니다."
-              : overallLevel === "caution"
-              ? "출조 시 주의가 필요한 날씨입니다."
-              : "낚시하기에 좋은 날씨입니다."
-          }</p>
-
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <Metric
-              icon={<Wind className="w-4 h-4" />} label="풍속" value={`${windValue}`} unit="m/s" level={windLevel}
-              flipped={flippedMetric === "풍속"}
-              onToggle={() => setFlippedMetric((cur) => (cur === "풍속" ? null : "풍속"))}
-            />
-            <Metric
-              icon={<Waves className="w-4 h-4" />} label="파고" value={`${waveValue}`} unit="m" level={waveLevel}
-              flipped={flippedMetric === "파고"}
-              onToggle={() => setFlippedMetric((cur) => (cur === "파고" ? null : "파고"))}
-            />
-            <Metric
-              icon={<CloudRain className="w-4 h-4" />} label="강수" value={`${firstRain}`} unit="%" level={rainLevel}
-              flipped={flippedMetric === "강수"}
-              onToggle={() => setFlippedMetric((cur) => (cur === "강수" ? null : "강수"))}
-            />
-            <Metric
-              icon={<Thermometer className="w-4 h-4" />} label="기온" value={`${firstTemp}`} unit="°" level={tempLevel}
-              flipped={flippedMetric === "기온"}
-              onToggle={() => setFlippedMetric((cur) => (cur === "기온" ? null : "기온"))}
-            />
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg bg-red-50 px-3 py-2">
-              <span className="text-red-700 font-semibold">만조</span>{" "}
-              <span className="text-foreground">
-                {tideLoading ? "…" : (tideHighs[0]?.time ?? "-")}
-              </span>
-            </div>
-            <div className="rounded-lg bg-blue-50 px-3 py-2">
-              <span className="text-blue-700 font-semibold">간조</span>{" "}
-              <span className="text-foreground">
-                {tideLoading ? "…" : (tideLows[0]?.time ?? "-")}
-              </span>
-            </div>
-          </div>
-
-          {(nextEvent || tideRange) && (
-            <div className="mt-2 text-[11px] text-muted-foreground flex items-center justify-between">
-              {nextEvent && (
-                <span>
-                  다음 {nextEvent.type === "high" ? "만조" : "간조"} {nextEvent.time}
-                  {" "}
-                  <span className="text-foreground/70">({nextEvent.inText})</span>
-                </span>
-              )}
-              {tideRange && (
-                <span>
-                  조수차{" "}
-                  <span className="font-semibold text-foreground">
-                    {(tideRange / 100).toFixed(2)}m
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-end text-xs text-primary font-medium">
-            상세보기 <ChevronRight className="w-3.5 h-3.5" />
-          </div>
-        </Card>
-      </Link>
-
-      {onRemove && (
+      {onRemove && !requireAuth && (
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <button
@@ -241,6 +261,26 @@ export function PointCard({
               <AlertDialogCancel>취소</AlertDialogCancel>
               <AlertDialogAction onClick={() => onRemove(point.id)}>
                 삭제
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {requireAuth && (
+        <AlertDialog open={signupPromptOpen} onOpenChange={setSignupPromptOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>회원가입이 필요해요</AlertDialogTitle>
+              <AlertDialogDescription>
+                회원가입하면 "{point.name}"을 비롯한 즐겨찾기 포인트의 상세 정보를 확인하고,
+                나만의 포인트를 추가할 수 있어요.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>취소</AlertDialogCancel>
+              <AlertDialogAction onClick={() => navigate({ to: "/login" })}>
+                회원가입하기
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

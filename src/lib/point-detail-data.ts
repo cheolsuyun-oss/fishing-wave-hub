@@ -68,7 +68,7 @@ export const POINT_DATA: Record<string, PointDetailData> = {
     lows: [{ time: "11:25", level: 8 }, { time: "23:50", level: 6 }],
     moon: { phase: "상현달", emoji: "🌓", illumination: 52 },
   },
-  "daecheon-breakwater": {
+  "bangpo-port": {
     wind: [
       w(0, "NW", 6, 9),
       w(3, "NNW", 7, 10),

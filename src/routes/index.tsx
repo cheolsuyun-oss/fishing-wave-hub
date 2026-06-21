@@ -35,8 +35,8 @@ import { getWeatherWarning } from "@/lib/kma.functions";
 import { getVillageForecast } from "@/lib/forecast.functions";
 import { formatFcstBasis } from "@/lib/geo";
 import { getMulddae } from "@/lib/moonAge";
-import { supabase } from "@/lib/supabase";
-import type { FishingPoint } from "@/lib/points";
+import { supabase, getSession } from "@/lib/supabase";
+import { POINTS, type FishingPoint } from "@/lib/points";
 import appIcon from "@/assets/app-icon.png";
 
 export const Route = createFileRoute("/")({
@@ -92,8 +92,26 @@ function SortablePointCard({
 
 function Home() {
   const navigate = useNavigate();
-  const { points, remove, reorder, isFull, max } = useFavoritePoints();
+  const { points: favoritePoints, remove, reorder, isFull, max } = useFavoritePoints();
+
   const [limitOpen, setLimitOpen] = useState(false);
+
+  // 로그인 세션 상태 — null(확인 전) / true(로그인) / false(비로그인)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSession().then(({ session }) => {
+      if (!cancelled) setIsLoggedIn(!!session);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session);
+    });
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   // 매직링크 클릭 후 URL 해시에서 세션 토큰 처리
   useEffect(() => {
@@ -135,6 +153,9 @@ function Home() {
     refetchOnWindowFocus: false,
   });
 
+  // 비로그인이면 하드코딩 샘플 3곳(POINTS), 로그인이면 실제 즐겨찾기
+  const points = isLoggedIn ? favoritePoints : POINTS;
+
   const firstPoint = points[0];
   const { data: fcst } = useQuery({
     queryKey: ["fcst", firstPoint?.nx, firstPoint?.ny],
@@ -168,7 +189,9 @@ function Home() {
         <section className="mt-6">
           <div className="flex items-baseline justify-between mb-1">
             <h2 className="text-sm font-bold text-foreground">즐겨찾기 포인트</h2>
-            <span className="text-xs text-muted-foreground">{points.length}/{max}곳</span>
+            {isLoggedIn && (
+              <span className="text-xs text-muted-foreground">{favoritePoints.length}/{max}곳</span>
+            )}
           </div>
           {(fcstBasis || mulddae) && (
             <p className="text-[11px] text-muted-foreground/70 mb-2">
@@ -178,7 +201,20 @@ function Home() {
             </p>
           )}
 
-          {points.length === 0 ? (
+          {isLoggedIn === null ? (
+            // 세션 확인 중 — 깜빡임(샘플 → 실제 즐겨찾기 전환) 방지를 위해 스켈레톤만 표시
+            <div className="space-y-3">
+              <div className="rounded-xl bg-muted animate-pulse h-48 w-full" />
+              <div className="rounded-xl bg-muted animate-pulse h-48 w-full" />
+            </div>
+          ) : !isLoggedIn ? (
+            // 비로그인 — 샘플 3곳, 삭제 불가, 클릭 시 회원가입 안내
+            <div className="space-y-3">
+              {points.map((p) => (
+                <PointCard key={p.id} point={p} requireAuth />
+              ))}
+            </div>
+          ) : favoritePoints.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground text-sm">
               아직 추가된 포인트가 없어요.<br />신규 포인트를 추가해보세요 🎣
             </div>
@@ -189,11 +225,11 @@ function Home() {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={points.map((p) => p.id)}
+                items={favoritePoints.map((p) => p.id)}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-3">
-                  {points.map((p) => (
+                  {favoritePoints.map((p) => (
                     <SortablePointCard key={p.id} point={p} onRemove={remove} />
                   ))}
                 </div>
@@ -201,15 +237,17 @@ function Home() {
             </DndContext>
           )}
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleAdd}
-            className="mt-3 w-full h-12 border-dashed"
-          >
-            <Plus className="w-4 h-4" />
-            포인트 추가
-          </Button>
+          {isLoggedIn && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAdd}
+              className="mt-3 w-full h-12 border-dashed"
+            >
+              <Plus className="w-4 h-4" />
+              포인트 추가
+            </Button>
+          )}
         </section>
       </div>
 

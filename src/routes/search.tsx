@@ -28,6 +28,7 @@ import {
 
 import { loadKakaoMaps } from "@/lib/kakao-loader";
 import { useFavoritePoints } from "@/lib/favorites-store";
+import { getSession } from "@/lib/supabase";
 import {
   haversine,
   latLngToGrid,
@@ -226,7 +227,7 @@ function SearchPage() {
     setSaveOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!picked) return;
     const trimmed = alias.trim();
     if (!trimmed) {
@@ -238,8 +239,21 @@ function SearchPage() {
       setLimitOpen(true);
       return;
     }
+
+    // 로그인 체크 — 관측소 매칭(Supabase tide_station_regions)은 로그인 사용자만 조회 가능
+    const { session } = await getSession();
+    if (!session) {
+      toast.error("로그인 후 이용해주세요");
+      setSaveOpen(false);
+      return;
+    }
+
     const { nx, ny } = latLngToGrid(picked.lat, picked.lng);
-    const station = nearestTideStation(picked.lat, picked.lng);
+    const station = await nearestTideStation(picked.lat, picked.lng);
+    if (!station) {
+      toast.error("관측소 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요");
+      return;
+    }
     const sea = inferSea(picked.lat, picked.lng);
     const point: FishingPoint = {
       id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -252,7 +266,7 @@ function SearchPage() {
       tide: "-",
       nx,
       ny,
-      tideStationCode: station.code,
+      tideStationCode: station.station_code,
       lat: picked.lat,
       lng: picked.lng,
     };
