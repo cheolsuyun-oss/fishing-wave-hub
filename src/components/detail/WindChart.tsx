@@ -30,6 +30,22 @@ const ZONE_COLORS = {
   far: "hsl(199 80% 65%)",
 } as const;
 
+// 풍속 선 전용 색상 — 화살표 색과 분리, 배경 역할만 하도록 무채색으로 통일
+const LINE_COLOR = "hsl(0 0% 70%)";
+
+// 화살표 윤곽선 path (제비꼬리형, 머리/꼬리 모두 뾰족, 아래쪽 가장자리만 깊게 패임)
+// 좌표계 기준: 중심 원점, x축 +방향이 머리(진행방향), 폭 약 -10~10
+const ARROW_PATH =
+  "M10,0.15 L-0.14,-5.06 L1.45,-0.94 L-10,-2.34 L-6.99,0.23 L-9.83,3.21 L1.53,1.14 L-0.18,5.06 Z";
+
+// near(초단기예보) zone 전용 — 테두리(진한 남색) / 채움(밝은 파랑) 톤 분리
+const NEAR_ARROW_FILL = "hsl(217 80% 55%)";
+const NEAR_ARROW_STROKE = "hsl(217 90% 30%)";
+
+// far(단기예보) zone 전용 — 테두리(진한 하늘색) / 채움(밝은 하늘색) 톤 분리
+const FAR_ARROW_FILL = "hsl(199 80% 65%)";
+const FAR_ARROW_STROKE = "hsl(199 85% 38%)";
+
 interface ChartPoint {
   t: number;
   hourOfDay: number;
@@ -262,13 +278,20 @@ export default function WindChart({ pointId }: { pointId: string }) {
     };
     if (index % arrowEvery !== 0) return <g key={index} />;
     if (!payload[zoneKey]) return <g key={index} />;
+
+    const isNear = zoneKey === "speedNear";
+    const isFar = zoneKey === "speedFar";
+    const fill = isNear ? NEAR_ARROW_FILL : isFar ? FAR_ARROW_FILL : color;
+    const stroke = isNear ? NEAR_ARROW_STROKE : isFar ? FAR_ARROW_STROKE : color;
+    const strokeWidth = isNear || isFar ? 0.5 : 0.8;
+
     return (
-      <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180})`}>
+      <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180}) scale(0.7)`}>
         <path
-          d="M0,-5 L3.5,4 L0,2 L-3.5,4 Z"
-          fill={color}
-          stroke={color}
-          strokeWidth={1}
+          d={ARROW_PATH}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
           strokeLinejoin="round"
         />
       </g>
@@ -420,8 +443,8 @@ export default function WindChart({ pointId }: { pointId: string }) {
             <Line
               type="monotone"
               dataKey="speedPast"
-              stroke={ZONE_COLORS.past}
-              strokeWidth={2.5}
+              stroke={LINE_COLOR}
+              strokeWidth={0.75}
               isAnimationActive={false}
               activeDot={false}
               connectNulls={false}
@@ -430,8 +453,8 @@ export default function WindChart({ pointId }: { pointId: string }) {
             <Line
               type="monotone"
               dataKey="speedNear"
-              stroke={ZONE_COLORS.near}
-              strokeWidth={2.5}
+              stroke={LINE_COLOR}
+              strokeWidth={0.75}
               isAnimationActive={false}
               activeDot={false}
               connectNulls={false}
@@ -440,8 +463,8 @@ export default function WindChart({ pointId }: { pointId: string }) {
             <Line
               type="monotone"
               dataKey="speedFar"
-              stroke={ZONE_COLORS.far}
-              strokeWidth={2.5}
+              stroke={LINE_COLOR}
+              strokeWidth={0.75}
               isAnimationActive={false}
               activeDot={false}
               connectNulls={false}
