@@ -88,7 +88,7 @@ async function collectPoint(point: { code: string; nx: number; ny: number }) {
     pty: cats.PTY ?? null,
     vec: cats.VEC ?? null,
     wsd: cats.WSD ?? null,
-    rcv_dt: kstISOString(),
+    rcv_utc: new Date().toISOString(),
   };
 
   const { error } = await supabase

@@ -10,17 +10,6 @@ function kstNow() {
   return new Date(Date.now() + 9 * 3600000);
 }
 
-function kstISOString() {
-  const kst = kstNow();
-  const yyyy = kst.getUTCFullYear();
-  const mm = String(kst.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(kst.getUTCDate()).padStart(2, "0");
-  const hh = String(kst.getUTCHours()).padStart(2, "0");
-  const mi = String(kst.getUTCMinutes()).padStart(2, "0");
-  const ss = String(kst.getUTCSeconds()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+09:00`;
-}
-
 function ultraBaseTime() {
   const now = kstNow();
   const h = now.getUTCHours();
@@ -96,7 +85,7 @@ async function collectPoint(point: { code: string; nx: number; ny: number }) {
       vvv: cats.VVV ?? null,
       vec: cats.VEC ?? null,
       wsd: cats.WSD ?? null,
-      rcv_dt: kstISOString(),
+      rcv_utc: new Date().toISOString(),
     };
   });
 
