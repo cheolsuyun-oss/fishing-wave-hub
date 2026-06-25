@@ -56,7 +56,7 @@ interface ChartPoint {
   gust: number;
   dir: number;
   dirLabel: string;
-  source: "ultra" | "short";
+  source: "ultra" | "short" | "extended";
 }
 
 function degToLabel(deg: number): string {
@@ -278,6 +278,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
     };
     if (index % arrowEvery !== 0) return <g key={index} />;
     if (!payload[zoneKey]) return <g key={index} />;
+    if (payload.source === "extended") return <g key={index} />;
 
     const isNear = zoneKey === "speedNear";
     const isFar = zoneKey === "speedFar";
