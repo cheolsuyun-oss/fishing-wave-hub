@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { windColor, WIND_COLORS, SUN_BAND_COLORS, TIMELINE_COLORS } from "@/lib/chart-colors";
 import { getSunInfo } from "@/lib/sun.functions";
 import { buildSunBands, bandFill, bandOpacity } from "@/lib/sun-bands";
-import { getVillageForecastTimeline, getVillageForecast, type VillageForecastHour } from "@/lib/forecast.functions";
+import { getVillageForecastTimeline, getVillageForecast, getPastUltraTimeline, type VillageForecastHour } from "@/lib/forecast.functions";
 import { useQuery } from "@tanstack/react-query";
 import { getPoint } from "@/lib/points";
 import { getCustomPointsSync } from "@/lib/custom-points-store";
@@ -30,21 +30,20 @@ const ZONE_COLORS = {
   far: "hsl(199 80% 65%)",
 } as const;
 
-// 풍속 선 전용 색상 — 화살표 색과 분리, 배경 역할만 하도록 무채색으로 통일
 const LINE_COLOR = "hsl(0 0% 70%)";
 
-// 화살표 윤곽선 path (제비꼬리형, 머리/꼬리 모두 뾰족, 아래쪽 가장자리만 깊게 패임)
-// 좌표계 기준: 중심 원점, x축 +방향이 머리(진행방향), 폭 약 -10~10
 const ARROW_PATH =
   "M10,0.15 L-0.14,-5.06 L1.45,-0.94 L-10,-2.34 L-6.99,0.23 L-9.83,3.21 L1.53,1.14 L-0.18,5.06 Z";
 
-// near(초단기예보) zone 전용 — 테두리(진한 남색) / 채움(밝은 파랑) 톤 분리
 const NEAR_ARROW_FILL = "hsl(217 80% 55%)";
 const NEAR_ARROW_STROKE = "hsl(217 90% 30%)";
 
-// far(단기예보) zone 전용 — 테두리(진한 하늘색) / 채움(밝은 하늘색) 톤 분리
 const FAR_ARROW_FILL = "hsl(199 80% 65%)";
 const FAR_ARROW_STROKE = "hsl(199 85% 38%)";
+
+// 과거 실측(forecasts_ultra) 화살표 색상
+const PAST_ULTRA_FILL = "hsl(0 0% 15%)";
+const PAST_ULTRA_STROKE = "hsl(0 0% 5%)";
 
 interface ChartPoint {
   t: number;
@@ -53,9 +52,11 @@ interface ChartPoint {
   speedPast: number | null;
   speedNear: number | null;
   speedFar: number | null;
+  speedPastUltra: number | null;
   gust: number;
   dir: number;
   dirLabel: string;
+  dirPastUltra: number;
   source: "ultra" | "short";
 }
 
@@ -64,7 +65,11 @@ function degToLabel(deg: number): string {
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
-function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] {
+function buildData(
+  timeline: VillageForecastHour[],
+  pastUltra: VillageForecastHour[],
+  nowT: number
+): ChartPoint[] {
   const filtered = timeline.filter((h) => h.wsd != null);
 
   const zoneOf = (t: number): "past" | "near" | "far" => {
@@ -75,15 +80,21 @@ function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] 
 
   const zones = filtered.map((h) => zoneOf(h.hour));
 
+  // 과거 실측 데이터를 hour 기준 Map으로
+  const ultraByHour = new Map(pastUltra.map((r) => [r.hour, r]));
+
   return filtered.map((h, i) => {
     const speed = h.wsd ?? 0;
     const zone = zones[i];
     const prevZone = i > 0 ? zones[i - 1] : zone;
     const nextZone = i < zones.length - 1 ? zones[i + 1] : zone;
 
-    const inPast = zone === "past" || (zone === "near" && prevZone === "past");
-    const inNear = zone === "near" || (zone === "past" && nextZone === "near") || (zone === "far" && prevZone === "near");
+    const inPast = zone === "past" && nextZone !== "near";
+    const inNear = zone === "near" || (zone === "past" && nextZone === "near");
     const inFar = zone === "far" || (zone === "near" && nextZone === "far");
+
+    // 과거 구간 실측값 매칭
+    const ultraRow = zone === "past" ? ultraByHour.get(Math.floor(h.hour)) ?? null : null;
 
     return {
       t: h.hour,
@@ -92,9 +103,11 @@ function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] 
       speedPast: inPast ? speed : null,
       speedNear: inNear ? speed : null,
       speedFar: inFar ? speed : null,
+      speedPastUltra: ultraRow?.wsd ?? null,
       gust: Math.round((speed * 1.3) * 10) / 10,
       dir: h.vec ?? 0,
       dirLabel: degToLabel(h.vec ?? 0),
+      dirPastUltra: ultraRow?.vec ?? 0,
       source: h.source,
     };
   });
@@ -196,6 +209,14 @@ export default function WindChart({ pointId }: { pointId: string }) {
     refetchOnWindowFocus: false,
   });
 
+  const { data: pastUltra = [] } = useQuery({
+    queryKey: ["pastUltra", point?.nx, point?.ny],
+    queryFn: () => getPastUltraTimeline(point!.nx, point!.ny),
+    enabled: !!point,
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const { data: currentFcst } = useQuery({
     queryKey: ["fcst", point?.nx, point?.ny],
     queryFn: () => getVillageForecast({ nx: point!.nx, ny: point!.ny }),
@@ -207,9 +228,9 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const currentNow = nowHour();
 
   const data = useMemo(() => {
-    const built = buildData(timeline, currentNow);
+    const built = buildData(timeline, pastUltra, currentNow);
     return built.filter((d) => d.t < range * 24);
-  }, [timeline, range, currentNow]);
+  }, [timeline, pastUltra, range, currentNow]);
 
   useEffect(() => {
     if (point) getSunInfo(point.lat, point.lng).then(setSunInfo);
@@ -270,9 +291,14 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
   const activeHourInt = Math.floor(activeT);
   const activeMin = Math.round((activeT - activeHourInt) * 60);
-  const activeTimeStr = `${String(activeHourInt).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
+  const displayHour = activeHourInt % 24;
+  const activeTimeStr = `${String(displayHour).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
 
-  const renderDot = (props: unknown, zoneKey: "speedPast" | "speedNear" | "speedFar", color: string) => {
+  const renderDot = (
+    props: unknown,
+    zoneKey: "speedPast" | "speedNear" | "speedFar" | "speedPastUltra",
+    color: string
+  ) => {
     const { cx, cy, payload, index } = props as {
       cx: number; cy: number; payload: ChartPoint; index: number;
     };
@@ -281,12 +307,17 @@ export default function WindChart({ pointId }: { pointId: string }) {
 
     const isNear = zoneKey === "speedNear";
     const isFar = zoneKey === "speedFar";
-    const fill = isNear ? NEAR_ARROW_FILL : isFar ? FAR_ARROW_FILL : color;
-    const stroke = isNear ? NEAR_ARROW_STROKE : isFar ? FAR_ARROW_STROKE : color;
+    const isPastUltra = zoneKey === "speedPastUltra";
+
+    const fill = isNear ? NEAR_ARROW_FILL : isFar ? FAR_ARROW_FILL : isPastUltra ? PAST_ULTRA_FILL : color;
+    const stroke = isNear ? NEAR_ARROW_STROKE : isFar ? FAR_ARROW_STROKE : isPastUltra ? PAST_ULTRA_STROKE : color;
     const strokeWidth = isNear || isFar ? 0.5 : 0.8;
 
+    // 실측 화살표는 dirPastUltra 사용, 나머지는 payload.dir
+    const dir = isPastUltra ? payload.dirPastUltra : payload.dir;
+
     return (
-      <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180}) scale(0.7)`}>
+      <g key={index} transform={`translate(${cx}, ${cy}) rotate(${dir + 180}) scale(0.7)`}>
         <path
           d={ARROW_PATH}
           fill={fill}
@@ -436,10 +467,11 @@ export default function WindChart({ pointId }: { pointId: string }) {
               unit=" m/s"
               stroke="var(--muted-foreground)"
               width={48}
-              domain={[0, "dataMax + 3"]}
+              domain={[-0.5, "dataMax + 3"]}
             />
             <Tooltip content={() => null} isAnimationActive={false} cursor={false} />
 
+            {/* 예보선 3구간 */}
             <Line
               type="monotone"
               dataKey="speedPast"
@@ -469,6 +501,18 @@ export default function WindChart({ pointId }: { pointId: string }) {
               activeDot={false}
               connectNulls={false}
               dot={(props) => renderDot(props, "speedFar", ZONE_COLORS.far)}
+            />
+
+            {/* 과거 실측선 (forecasts_ultra) */}
+            <Line
+              type="monotone"
+              dataKey="speedPastUltra"
+              stroke={LINE_COLOR}
+              strokeWidth={0.75}
+              isAnimationActive={false}
+              activeDot={false}
+              connectNulls={false}
+              dot={(props) => renderDot(props, "speedPastUltra", PAST_ULTRA_FILL)}
             />
           </LineChart>
         </ResponsiveContainer>

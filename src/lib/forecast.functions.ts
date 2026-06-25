@@ -320,7 +320,7 @@ async function traceDbQuery(stationCode: string, forecastDt: string, windSpeed: 
       note: note ?? null,
     });
   } catch {
-    // 트레이싱 실패는 조용히 무시 (로그인 안 한 상태 등)
+    // 트레이싱 실패는 조용히 무시
   }
 }
 
@@ -336,15 +336,15 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
   const now = kstNow();
   const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
 
-  const realNowMs = now.getTime() - 9 * 3600_000;
-  const fromUtcIso = new Date(realNowMs - 30 * 60_000).toISOString();
-  const toUtcIso = new Date(realNowMs + 6 * 3600_000).toISOString();
+  const nowUtcMs = now.getTime() - 9 * 3600_000;
+  const fromUtcIso = new Date(nowUtcMs - 30 * 60_000).toISOString();
+  const toUtcIso = new Date(nowUtcMs + 6 * 3600_000).toISOString();
 
   debugLog("forecast_pipeline", "query range (UTC):", fromUtcIso, "~", toUtcIso);
 
   const { data, error } = await supabase
-    .from("ultra_short_forecasts")
-    .select("forecast_dt, wind_speed, wind_dir, temp, precip_1h")
+    .from("forecasts_ultra")
+    .select("forecast_dt, wsd, vec, t1h")
     .eq("station_code", stationCode)
     .gte("forecast_dt", fromUtcIso)
     .lte("forecast_dt", toUtcIso)
@@ -359,11 +359,10 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
   debugLog("forecast_pipeline", "supabase ultra rows:", data.length, data.map((r) => r.forecast_dt));
 
   const firstRow = data[0];
-  // client_render와 trace_key 형식을 맞추기 위해 UTC -> KST(+09:00)로 변환
   const firstRowUtcMs = new Date(firstRow.forecast_dt as string).getTime();
   const firstRowKst = new Date(firstRowUtcMs + 9 * 3600_000);
   const firstRowKstIso = `${firstRowKst.getUTCFullYear()}-${String(firstRowKst.getUTCMonth() + 1).padStart(2, "0")}-${String(firstRowKst.getUTCDate()).padStart(2, "0")}T${String(firstRowKst.getUTCHours()).padStart(2, "0")}:00:00+09:00`;
-  await traceDbQuery(stationCode, firstRowKstIso, firstRow.wind_speed as number | null, "조회 성공");
+  await traceDbQuery(stationCode, firstRowKstIso, firstRow.wsd as number | null, "조회 성공");
 
   return data.map((row) => {
     const utcMs = new Date(row.forecast_dt as string).getTime();
@@ -371,7 +370,6 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
     const kstDate = new Date(kstMs);
     const hourOfDay = kstDate.getUTCHours();
     const kstDateStr = `${kstDate.getUTCFullYear()}${String(kstDate.getUTCMonth() + 1).padStart(2, "0")}${String(kstDate.getUTCDate()).padStart(2, "0")}`;
-    const fcstDate = kstDateStr;
     const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
 
     const kstY = parseInt(kstDateStr.slice(0, 4));
@@ -386,12 +384,12 @@ async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageF
     const hour = dayDiff * 24 + hourOfDay;
 
     return {
-      fcstDate,
+      fcstDate: kstDateStr,
       fcstTime,
       hour,
-      tmp: row.temp ?? null,
-      wsd: row.wind_speed ?? null,
-      vec: row.wind_dir ?? null,
+      tmp: row.t1h ?? null,
+      wsd: row.wsd ?? null,
+      vec: row.vec ?? null,
       pop: null,
       wav: null,
       source: "ultra" as const,
@@ -405,7 +403,6 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
 
     const now = kstNow();
     const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
-    const todayStrCompact = kstYMD(now);
 
     const uniqKeys = Array.from(new Set(items.map((i) => `${i.fcstDate}${i.fcstTime}`))).sort();
 
@@ -464,6 +461,68 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
 
   } catch (err) {
     console.error("KMA timeline failed:", err);
+    return [];
+  }
+}
+
+export async function getPastUltraTimeline(
+  nx: number,
+  ny: number
+): Promise<VillageForecastHour[]> {
+  try {
+    const stationCode = await nearestStationCodeByGrid(nx, ny);
+    if (!stationCode) return [];
+
+    const now = kstNow();
+    const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+
+    const nowUtcMs = now.getTime() - 9 * 3600_000;
+    // 오늘 KST 0시 = UTC 전날 15:00
+    const todayKstMidnightUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), -9, 0, 0);
+    const fromUtcIso = new Date(todayKstMidnightUtcMs).toISOString();
+    const toUtcIso = new Date(nowUtcMs).toISOString();
+
+    const { data, error } = await supabase
+      .from("forecasts_ultra")
+      .select("forecast_dt, wsd, vec")
+      .eq("station_code", stationCode)
+      .gte("forecast_dt", fromUtcIso)
+      .lte("forecast_dt", toUtcIso)
+      .order("forecast_dt", { ascending: true });
+
+    if (error || !data || data.length === 0) return [];
+
+    return data.map((row) => {
+      const utcMs = new Date(row.forecast_dt as string).getTime();
+      const kstMs = utcMs + 9 * 3600_000;
+      const kstDate = new Date(kstMs);
+      const hourOfDay = kstDate.getUTCHours();
+      const kstDateStr = `${kstDate.getUTCFullYear()}${String(kstDate.getUTCMonth() + 1).padStart(2, "0")}${String(kstDate.getUTCDate()).padStart(2, "0")}`;
+
+      const kstY = parseInt(kstDateStr.slice(0, 4));
+      const kstM = parseInt(kstDateStr.slice(4, 6)) - 1;
+      const kstD = parseInt(kstDateStr.slice(6, 8));
+      const tY = parseInt(todayStr.slice(0, 4));
+      const tM = parseInt(todayStr.slice(5, 7)) - 1;
+      const tD = parseInt(todayStr.slice(8, 10));
+      const dayDiff = Math.round(
+        (Date.UTC(kstY, kstM, kstD) - Date.UTC(tY, tM, tD)) / 86400000
+      );
+      const hour = dayDiff * 24 + hourOfDay;
+
+      return {
+        fcstDate: kstDateStr,
+        fcstTime: `${String(hourOfDay).padStart(2, "0")}00`,
+        hour,
+        tmp: null,
+        wsd: row.wsd != null ? Number(row.wsd) : null,
+        vec: row.vec != null ? Number(row.vec) : null,
+        pop: null,
+        wav: null,
+        source: "ultra" as const,
+      };
+    });
+  } catch {
     return [];
   }
 }
