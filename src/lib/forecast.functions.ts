@@ -25,7 +25,7 @@ export type VillageForecastHour = {
   vec: number | null;
   pop: number | null;
   wav: number | null;
-  source: "ultra" | "short" | "extended";
+  source: "ultra" | "short" | "extended" | "openmeteo";
 };
 
 type FcstItem = {
@@ -500,6 +500,70 @@ export async function getVillageForecastTimeline(data: { nx: number; ny: number 
 
   } catch (err) {
     console.error("KMA timeline failed:", err);
+    return [];
+  }
+}
+
+export async function getOpenMeteoTimeline(data: { nx: number; ny: number }): Promise<VillageForecastHour[]> {
+  try {
+    const stationCode = await nearestStationCodeByGrid(data.nx, data.ny);
+    if (!stationCode) return [];
+
+    const now = kstNow();
+    const todayStr = kstDateStr(now);
+
+    // forecasts_short 최대치(72h) 이후 ~ D5 끝(120h)
+    const fromUtcIso = new Date(Date.now() + 73 * 3600_000).toISOString();
+    const toUtcIso   = new Date(Date.now() + 121 * 3600_000).toISOString();
+
+    const { data: rows, error } = await supabase
+      .from("forecasts_openmeteo")
+      .select("forecast_dt, wsd, vec")
+      .eq("station_code", stationCode)
+      .gte("forecast_dt", fromUtcIso)
+      .lte("forecast_dt", toUtcIso)
+      .order("forecast_dt", { ascending: true })
+      .limit(48);
+
+    console.log("[DEBUG:openmeteo] stationCode:", stationCode, "rows:", rows?.length, "error:", error);
+    if (error || !rows || rows.length < 1) return [];
+
+    const todayY = parseInt(todayStr.slice(0, 4));
+    const todayM = parseInt(todayStr.slice(5, 7)) - 1;
+    const todayD = parseInt(todayStr.slice(8, 10));
+
+    return rows.map((row) => {
+      const utcMs  = new Date(row.forecast_dt as string).getTime();
+      const kstMs  = utcMs + 9 * 3600_000;
+      const kstDate = new Date(kstMs);
+      const hourOfDay = kstDate.getUTCHours();
+      const fcstDateCompact = kstYMD(kstDate);
+      const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
+
+      const kstY = parseInt(fcstDateCompact.slice(0, 4));
+      const kstM = parseInt(fcstDateCompact.slice(4, 6)) - 1;
+      const kstD = parseInt(fcstDateCompact.slice(6, 8));
+      const dayDiff = Math.round(
+        (Date.UTC(kstY, kstM, kstD) - Date.UTC(todayY, todayM, todayD)) / 86400000
+      );
+      const hour = dayDiff * 24 + hourOfDay;
+
+      const wsd = Number((row as { wsd?: string | number | null }).wsd);
+      const vec = Number((row as { vec?: string | number | null }).vec);
+
+      return {
+        fcstDate: fcstDateCompact,
+        fcstTime,
+        hour,
+        tmp: null,
+        wsd: Number.isFinite(wsd) ? wsd : null,
+        vec: Number.isFinite(vec) ? vec : null,
+        pop: null,
+        wav: null,
+        source: "openmeteo" as const,
+      };
+    });
+  } catch {
     return [];
   }
 }

@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { windColor, WIND_COLORS, SUN_BAND_COLORS, TIMELINE_COLORS } from "@/lib/chart-colors";
 import { getSunInfo } from "@/lib/sun.functions";
 import { buildSunBands, bandFill, bandOpacity } from "@/lib/sun-bands";
-import { getVillageForecastTimeline, getVillageForecast, type VillageForecastHour } from "@/lib/forecast.functions";
+import { getVillageForecastTimeline, getVillageForecast, getOpenMeteoTimeline, type VillageForecastHour } from "@/lib/forecast.functions";
 import { useQuery } from "@tanstack/react-query";
 import { getPoint } from "@/lib/points";
 import { getCustomPointsSync } from "@/lib/custom-points-store";
@@ -30,19 +30,14 @@ const ZONE_COLORS = {
   far: "hsl(199 80% 65%)",
 } as const;
 
-// 풍속 선 전용 색상 — 화살표 색과 분리, 배경 역할만 하도록 무채색으로 통일
 const LINE_COLOR = "hsl(0 0% 70%)";
 
-// 화살표 윤곽선 path (제비꼬리형, 머리/꼬리 모두 뾰족, 아래쪽 가장자리만 깊게 패임)
-// 좌표계 기준: 중심 원점, x축 +방향이 머리(진행방향), 폭 약 -10~10
 const ARROW_PATH =
   "M10,0.15 L-0.14,-5.06 L1.45,-0.94 L-10,-2.34 L-6.99,0.23 L-9.83,3.21 L1.53,1.14 L-0.18,5.06 Z";
 
-// near(초단기예보) zone 전용 — 테두리(진한 남색) / 채움(밝은 파랑) 톤 분리
 const NEAR_ARROW_FILL = "hsl(217 80% 55%)";
 const NEAR_ARROW_STROKE = "hsl(217 90% 30%)";
 
-// far(단기예보) zone 전용 — 테두리(진한 하늘색) / 채움(밝은 하늘색) 톤 분리
 const FAR_ARROW_FILL = "hsl(199 80% 65%)";
 const FAR_ARROW_STROKE = "hsl(199 85% 38%)";
 
@@ -56,7 +51,7 @@ interface ChartPoint {
   gust: number;
   dir: number;
   dirLabel: string;
-  source: "ultra" | "short" | "extended";
+  source: "ultra" | "short" | "extended" | "openmeteo";
 }
 
 function degToLabel(deg: number): string {
@@ -196,6 +191,14 @@ export default function WindChart({ pointId }: { pointId: string }) {
     refetchOnWindowFocus: false,
   });
 
+  const { data: openMeteoTimeline = [] } = useQuery({
+    queryKey: ["openMeteoTimeline", point?.nx, point?.ny, range],
+    queryFn: () => getOpenMeteoTimeline({ nx: point!.nx, ny: point!.ny }),
+    enabled: !!point && range === 5,
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const { data: currentFcst } = useQuery({
     queryKey: ["fcst", point?.nx, point?.ny],
     queryFn: () => getVillageForecast({ nx: point!.nx, ny: point!.ny }),
@@ -207,9 +210,12 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const currentNow = nowHour();
 
   const data = useMemo(() => {
-    const built = buildData(timeline, currentNow);
+    const mergedTimeline = range === 5
+      ? [...timeline, ...openMeteoTimeline.filter((r) => !timeline.some((t) => t.hour === r.hour))]
+      : timeline;
+    const built = buildData(mergedTimeline, currentNow);
     return built.filter((d) => d.t < range * 24);
-  }, [timeline, range, currentNow]);
+  }, [timeline, openMeteoTimeline, range, currentNow]);
 
   useEffect(() => {
     if (point) getSunInfo(point.lat, point.lng).then(setSunInfo);
@@ -278,6 +284,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
     };
     if (index % arrowEvery !== 0) return <g key={index} />;
     if (!payload[zoneKey]) return <g key={index} />;
+    // flat 연장(extended)은 화살표 숨김, openmeteo는 표시
     if (payload.source === "extended") return <g key={index} />;
 
     const isNear = zoneKey === "speedNear";
