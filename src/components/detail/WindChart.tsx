@@ -22,7 +22,7 @@ import { getCustomPointsSync } from "@/lib/custom-points-store";
 import { nearestStationCodeByGrid } from "@/lib/geo";
 import { supabase } from "@/lib/supabase";
 
-type Range = 1 | 3;
+type Range = 1 | 3 | 5;
 
 const ZONE_COLORS = {
   past: "hsl(0 0% 15%)",
@@ -304,7 +304,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-bold">바람</h2>
         <div className="flex rounded-full bg-muted p-0.5 text-xs">
-          {([1, 3] as Range[]).map((r) => (
+          {([1, 3, 5] as Range[]).map((r) => (
             <button
               key={r}
               onClick={() => setRange(r)}
