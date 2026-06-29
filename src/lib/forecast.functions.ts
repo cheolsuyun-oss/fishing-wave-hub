@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
-import { nearestStationCodeByGrid } from "./geo";
 import { debugLog } from "./debug";
+import { kstNow, kstYMD, kstDateStr, kstTodayStartUTC } from "./time";
 
 export type VillageForecast = {
   nx: number;
@@ -24,7 +24,7 @@ export type VillageForecastHour = {
   vec: number | null;
   pop: number | null;
   wav: number | null;
-  source: "ultra" | "short";
+  source: "ultra" | "short" | "extended" | "openmeteo";
 };
 
 type FcstItem = {
@@ -43,14 +43,6 @@ type NcstItem = {
 
 const TTL_MS = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; data: VillageForecast }>();
-
-function kstNow(): Date {
-  return new Date(Date.now() + 9 * 3600_000);
-}
-
-function kstYMD(d: Date): string {
-  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
-}
 
 function kstHH(d: Date): number {
   return d.getUTCHours();
@@ -311,218 +303,116 @@ export async function getVillageForecast(data: { nx: number; ny: number }): Prom
   }
 }
 
-async function traceDbQuery(stationCode: string, forecastDt: string, windSpeed: number | null, note?: string) {
-  try {
-    await supabase.from("debug_trace").insert({
-      trace_key: `${stationCode}|${forecastDt}`,
-      node: "db_query",
-      wind_speed: windSpeed,
-      note: note ?? null,
-    });
-  } catch {
-    // 트레이싱 실패는 조용히 무시
-  }
-}
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
-async function getTimelineFromSupabase(nx: number, ny: number): Promise<VillageForecastHour[]> {
-  const stationCode = await nearestStationCodeByGrid(nx, ny);
-  debugLog("forecast_pipeline", "nx,ny:", nx, ny, "-> stationCode:", stationCode);
-
-  if (!stationCode) {
-    debugLog("forecast_pipeline", "stationCode null — 관측소 매칭 실패, 빈 배열 반환");
-    return [];
-  }
-
-  const now = kstNow();
-  const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
-
-  const nowUtcMs = now.getTime() - 9 * 3600_000;
-  const fromUtcIso = new Date(nowUtcMs - 30 * 60_000).toISOString();
-  const toUtcIso = new Date(nowUtcMs + 6 * 3600_000).toISOString();
-
-  debugLog("forecast_pipeline", "query range (UTC):", fromUtcIso, "~", toUtcIso);
-
-  const { data, error } = await supabase
-    .from("forecasts_ultra")
-    .select("forecast_dt, wsd, vec, t1h")
-    .eq("station_code", stationCode)
-    .gte("forecast_dt", fromUtcIso)
-    .lte("forecast_dt", toUtcIso)
-    .order("forecast_dt", { ascending: true })
-    .limit(12);
-
-  if (error || !data || data.length < 1) {
-    debugLog("forecast_pipeline", "supabase ultra data empty. error:", error);
-    await traceDbQuery(stationCode, fromUtcIso, null, error ? `조회 에러: ${error.message}` : "빈 결과");
-    return [];
-  }
-  debugLog("forecast_pipeline", "supabase ultra rows:", data.length, data.map((r) => r.forecast_dt));
-
-  const firstRow = data[0];
-  const firstRowUtcMs = new Date(firstRow.forecast_dt as string).getTime();
-  const firstRowKst = new Date(firstRowUtcMs + 9 * 3600_000);
-  const firstRowKstIso = `${firstRowKst.getUTCFullYear()}-${String(firstRowKst.getUTCMonth() + 1).padStart(2, "0")}-${String(firstRowKst.getUTCDate()).padStart(2, "0")}T${String(firstRowKst.getUTCHours()).padStart(2, "0")}:00:00+09:00`;
-  await traceDbQuery(stationCode, firstRowKstIso, firstRow.wsd as number | null, "조회 성공");
-
-  return data.map((row) => {
-    const utcMs = new Date(row.forecast_dt as string).getTime();
-    const kstMs = utcMs + 9 * 3600_000;
-    const kstDate = new Date(kstMs);
-    const hourOfDay = kstDate.getUTCHours();
-    const kstDateStr = `${kstDate.getUTCFullYear()}${String(kstDate.getUTCMonth() + 1).padStart(2, "0")}${String(kstDate.getUTCDate()).padStart(2, "0")}`;
-    const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
-
-    const kstY = parseInt(kstDateStr.slice(0, 4));
-    const kstM = parseInt(kstDateStr.slice(4, 6)) - 1;
-    const kstD = parseInt(kstDateStr.slice(6, 8));
-    const todayY = parseInt(todayStr.slice(0, 4));
-    const todayM = parseInt(todayStr.slice(5, 7)) - 1;
-    const todayD = parseInt(todayStr.slice(8, 10));
-    const dayDiff = Math.round(
-      (Date.UTC(kstY, kstM, kstD) - Date.UTC(todayY, todayM, todayD)) / 86400000
-    );
-    const hour = dayDiff * 24 + hourOfDay;
-
-    return {
-      fcstDate: kstDateStr,
-      fcstTime,
-      hour,
-      tmp: row.t1h ?? null,
-      wsd: row.wsd ?? null,
-      vec: row.vec ?? null,
-      pop: null,
-      wav: null,
-      source: "ultra" as const,
-    };
+async function callEdgeFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify(body),
   });
+  if (!res.ok) throw new Error(`Edge Function ${name} failed: ${res.status}`);
+  return res.json() as Promise<T>;
 }
 
-export async function getVillageForecastTimeline(data: { nx: number; ny: number }): Promise<VillageForecastHour[]> {
+type WindForecastHour = {
+  hour: number;
+  wsd: number | null;
+  vec: number | null;
+  tmp: number | null;
+  pop: number | null;
+  wav: number | null;
+  source: "ultra" | "short" | "extended" | "openmeteo";
+};
+
+export async function getVillageForecastTimeline(data: {
+  nx: number;
+  ny: number;
+  stationCode: string;
+  range?: 1 | 3 | 5;
+}): Promise<VillageForecastHour[]> {
   try {
-    const items = await fetchItems(data.nx, data.ny);
-
-    const now = kstNow();
-    const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
-
-    const uniqKeys = Array.from(new Set(items.map((i) => `${i.fcstDate}${i.fcstTime}`))).sort();
-
-    const pick = (cat: string, fcstDate: string, fcstTime: string) => {
-      const it = items.find((i) => i.category === cat && i.fcstDate === fcstDate && i.fcstTime === fcstTime);
-      if (!it) return null;
-      const n = Number(it.fcstValue);
-      return Number.isFinite(n) ? n : null;
-    };
-
-    const shortTimeline: VillageForecastHour[] = uniqKeys.map((k) => {
-      const fcstDate = k.slice(0, 8);
-      const fcstTime = k.slice(8);
-      const hourOfDay = parseInt(fcstTime.slice(0, 2), 10);
-
-      const fY = parseInt(fcstDate.slice(0, 4));
-      const fM = parseInt(fcstDate.slice(4, 6)) - 1;
-      const fD = parseInt(fcstDate.slice(6, 8));
-      const tY = parseInt(todayStr.slice(0, 4));
-      const tM = parseInt(todayStr.slice(5, 7)) - 1;
-      const tD = parseInt(todayStr.slice(8, 10));
-      const dayDiff = Math.round((Date.UTC(fY, fM, fD) - Date.UTC(tY, tM, tD)) / 86400000);
-      const hour = dayDiff * 24 + hourOfDay;
-
-      return {
-        fcstDate, fcstTime, hour,
-        tmp: pick("TMP", fcstDate, fcstTime),
-        wsd: pick("WSD", fcstDate, fcstTime),
-        vec: pick("VEC", fcstDate, fcstTime),
-        pop: pick("POP", fcstDate, fcstTime),
-        wav: pick("WAV", fcstDate, fcstTime),
-        source: "short" as const,
-      };
+    const range = data.range ?? 1;
+    const rows = await callEdgeFunction<WindForecastHour[]>("get-wind-forecast", {
+      station_code: data.stationCode,
+      range,
     });
 
-    try {
-      const ultraTimeline = await getTimelineFromSupabase(data.nx, data.ny);
-      debugLog("forecast_pipeline", "ultraTimeline hours:", ultraTimeline.map((r) => r.hour));
-      debugLog("forecast_pipeline", "shortTimeline hours (first 10):", shortTimeline.slice(0, 10).map((r) => r.hour));
-      if (ultraTimeline.length >= 1) {
-        const shortByHour = new Map(shortTimeline.map((row) => [row.hour, row]));
-        const ultraByHour = new Map(ultraTimeline.map((row) => [row.hour, row]));
-        const allHours = Array.from(
-          new Set([...shortByHour.keys(), ...ultraByHour.keys()]),
-        ).sort((a, b) => a - b);
-        const merged = allHours.map(
-          (hour) => ultraByHour.get(hour) ?? shortByHour.get(hour)!,
-        );
-        return merged;
-      }
-    } catch (e) {
-      debugLog("forecast_pipeline", "ultraTimeline fetch failed:", e);
-    }
+    const now = kstNow();
+    const todayStr = kstDateStr(now);
 
-    return shortTimeline;
-
+    return rows.map((r) => {
+      const dayDiff = Math.floor(r.hour / 24);
+      const hourOfDay = r.hour % 24;
+      const d = new Date(Date.UTC(
+        parseInt(todayStr.slice(0, 4)),
+        parseInt(todayStr.slice(5, 7)) - 1,
+        parseInt(todayStr.slice(8, 10)) + dayDiff,
+      ));
+      const fcstDate = kstYMD(d);
+      const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
+      return {
+        fcstDate,
+        fcstTime,
+        hour: r.hour,
+        tmp: r.tmp,
+        wsd: r.wsd,
+        vec: r.vec,
+        pop: r.pop,
+        wav: r.wav,
+        source: r.source,
+      };
+    });
   } catch (err) {
-    console.error("KMA timeline failed:", err);
+    console.error("getVillageForecastTimeline failed:", err);
     return [];
   }
 }
 
-export async function getPastUltraTimeline(
-  nx: number,
-  ny: number
-): Promise<VillageForecastHour[]> {
+export async function getOpenMeteoTimeline(data: {
+  nx: number;
+  ny: number;
+  stationCode: string;
+}): Promise<VillageForecastHour[]> {
   try {
-    const stationCode = await nearestStationCodeByGrid(nx, ny);
-    if (!stationCode) return [];
+    const rows = await callEdgeFunction<WindForecastHour[]>("get-wind-forecast", {
+      station_code: data.stationCode,
+      range: 5,
+    });
 
     const now = kstNow();
-    const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+    const todayStr = kstDateStr(now);
 
-    const nowUtcMs = now.getTime() - 9 * 3600_000;
-    // 오늘 KST 0시 = UTC 전날 15:00
-    const todayKstMidnightUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), -9, 0, 0);
-    const fromUtcIso = new Date(todayKstMidnightUtcMs).toISOString();
-    const toUtcIso = new Date(nowUtcMs).toISOString();
-
-    const { data, error } = await supabase
-      .from("forecasts_ultra")
-      .select("forecast_dt, wsd, vec")
-      .eq("station_code", stationCode)
-      .gte("forecast_dt", fromUtcIso)
-      .lte("forecast_dt", toUtcIso)
-      .order("forecast_dt", { ascending: true });
-
-    if (error || !data || data.length === 0) return [];
-
-    return data.map((row) => {
-      const utcMs = new Date(row.forecast_dt as string).getTime();
-      const kstMs = utcMs + 9 * 3600_000;
-      const kstDate = new Date(kstMs);
-      const hourOfDay = kstDate.getUTCHours();
-      const kstDateStr = `${kstDate.getUTCFullYear()}${String(kstDate.getUTCMonth() + 1).padStart(2, "0")}${String(kstDate.getUTCDate()).padStart(2, "0")}`;
-
-      const kstY = parseInt(kstDateStr.slice(0, 4));
-      const kstM = parseInt(kstDateStr.slice(4, 6)) - 1;
-      const kstD = parseInt(kstDateStr.slice(6, 8));
-      const tY = parseInt(todayStr.slice(0, 4));
-      const tM = parseInt(todayStr.slice(5, 7)) - 1;
-      const tD = parseInt(todayStr.slice(8, 10));
-      const dayDiff = Math.round(
-        (Date.UTC(kstY, kstM, kstD) - Date.UTC(tY, tM, tD)) / 86400000
-      );
-      const hour = dayDiff * 24 + hourOfDay;
-
-      return {
-        fcstDate: kstDateStr,
-        fcstTime: `${String(hourOfDay).padStart(2, "0")}00`,
-        hour,
-        tmp: null,
-        wsd: row.wsd != null ? Number(row.wsd) : null,
-        vec: row.vec != null ? Number(row.vec) : null,
-        pop: null,
-        wav: null,
-        source: "ultra" as const,
-      };
-    });
-  } catch {
+    return rows
+      .filter((r) => r.source === "openmeteo")
+      .map((r) => {
+        const dayDiff = Math.floor(r.hour / 24);
+        const hourOfDay = r.hour % 24;
+        const d = new Date(Date.UTC(
+          parseInt(todayStr.slice(0, 4)),
+          parseInt(todayStr.slice(5, 7)) - 1,
+          parseInt(todayStr.slice(8, 10)) + dayDiff,
+        ));
+        const fcstDate = kstYMD(d);
+        const fcstTime = `${String(hourOfDay).padStart(2, "0")}00`;
+        return {
+          fcstDate,
+          fcstTime,
+          hour: r.hour,
+          tmp: r.tmp,
+          wsd: r.wsd,
+          vec: r.vec,
+          pop: r.pop,
+          wav: r.wav,
+          source: r.source,
+        };
+      });
+  } catch (err) {
+    console.error("getOpenMeteoTimeline failed:", err);
     return [];
   }
 }
