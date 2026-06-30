@@ -26,7 +26,7 @@ type Range = 1 | 3 | 5;
 const LINE_COLOR = "hsl(0 0% 70%)";
 
 const ARROW_PATH =
-  "M10,0.15 L-0.14,-5.06 L1.45,-0.94 L-10,-2.34 L-6.99,0.23 L-9.83,3.21 L1.53,1.14 L-0.18,5.06 Z";
+  "M0,-9 L7,5 Q2,2 1.5,5.5 L0,9 L-1.5,5.5 Q-2,2 -7,5 Z";
 
 // zone별 화살표 색상
 const ZONE_ARROW = {
@@ -249,6 +249,14 @@ export default function WindChart({ pointId }: { pointId: string }) {
     setActiveT(nowHour());
   };
 
+  const nearestToActiveT = useMemo(() => {
+    if (!data.length) return null;
+    return data.reduce(
+      (best, p) => Math.abs(p.t - activeT) < Math.abs(best.t - activeT) ? p : best,
+      data[0],
+    ).t;
+  }, [data, activeT]);
+
   const activeHourInt = Math.floor(activeT);
   const activeMin = Math.round((activeT - activeHourInt) * 60);
   const activeTimeStr = `${String(activeHourInt).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
@@ -266,10 +274,11 @@ export default function WindChart({ pointId }: { pointId: string }) {
       <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180}) scale(0.7)`}>
         <path
           d={ARROW_PATH}
-          fill={colors.fill}
+          fill={payload.t === nearestToActiveT ? "white" : colors.fill}
           stroke={colors.stroke}
           strokeWidth={0.5}
           strokeLinejoin="round"
+          fillRule="evenodd"
         />
       </g>
     );
@@ -442,7 +451,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
         </span>
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-1">
-            <span className="w-4 border-t-2 border-dashed" style={{ borderColor: TIMELINE_COLORS.current }} />
+            <span className="w-4 border-t-2 border-dashed" style={{ borderColor: TIMELINE_COLORS.active }} />
             현재
           </span>
           <span className="flex items-center gap-1">
