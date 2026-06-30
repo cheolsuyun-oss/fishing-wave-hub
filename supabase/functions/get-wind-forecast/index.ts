@@ -81,7 +81,6 @@ Deno.serve(async (req) => {
       .lte("base_dt", nowUtc)
       .order("base_dt", { ascending: true });
 
-    // base_dt 중복 제거 (같은 시각 여러 row 있을 경우 마지막 1개)
     const ncstByDt = new Map<string, typeof ncstRows[0]>();
     for (const r of (ncstRows ?? [])) {
       ncstByDt.set(r.base_dt, r);
@@ -106,6 +105,8 @@ Deno.serve(async (req) => {
       .single();
 
     const ultraTimeline: ForecastHour[] = [];
+    let ultraLastForecastDt: string | null = null;
+
     if (latestBaseRow) {
       const { data: ultraRows } = await supabase
         .from("fcst_ultra")
@@ -126,21 +127,24 @@ Deno.serve(async (req) => {
           source: "ultra",
         });
       }
+
+      if (ultraRows && ultraRows.length > 0) {
+        ultraLastForecastDt = ultraRows[ultraRows.length - 1].forecast_dt;
+      }
     }
 
-    // range 1이면 ncst + ultra만 반환
-    if (range === 1) {
-      const byHour = new Map<number, ForecastHour>();
-      for (const r of [...ncstTimeline, ...ultraTimeline]) byHour.set(r.hour, r);
-      const merged = Array.from(byHour.values()).sort((a, b) => a.hour - b.hour);
-      return new Response(JSON.stringify(merged), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // ── 3) ultra 마지막 forecast_dt 다음부터 short ────────────────
+    const shortFrom = ultraLastForecastDt
+      ? new Date(new Date(ultraLastForecastDt).getTime() + 3600_000).toISOString()
+      : new Date(Date.now() + 3600_000).toISOString();
 
-    // ── 3) +7h~+72h: forecasts_short ─────────────────────────────
-    const shortFrom = new Date(Date.now() + 7 * 3600_000).toISOString();
-    const shortTo   = new Date(Date.now() + 72 * 3600_000).toISOString();
+    // range 1은 당일(KST 23:59)까지, range 3/5는 72h까지
+    const kstEndOfDay = new Date(Date.now() + 9 * 3600_000);
+    kstEndOfDay.setUTCHours(23, 59, 59, 999);
+    const shortTo = range === 1
+      ? new Date(kstEndOfDay.getTime() - 9 * 3600_000).toISOString()
+      : new Date(Date.now() + 72 * 3600_000).toISOString();
+
     const { data: shortRows } = await supabase
       .from("forecasts_short")
       .select("forecast_dt, wsd, vec, tmp, pop, wav")
@@ -160,12 +164,16 @@ Deno.serve(async (req) => {
       source: "short",
     }));
 
-    // range 3이면 ncst + ultra + short 반환
-    if (range === 3) {
+    // range 1, 3 공통 병합 함수
+    const mergeAll = (...timelines: ForecastHour[][]) => {
       const byHour = new Map<number, ForecastHour>();
-      for (const r of [...ncstTimeline, ...ultraTimeline, ...shortTimeline]) byHour.set(r.hour, r);
-      const merged = Array.from(byHour.values()).sort((a, b) => a.hour - b.hour);
-      return new Response(JSON.stringify(merged), {
+      for (const tl of timelines)
+        for (const r of tl) byHour.set(r.hour, r);
+      return Array.from(byHour.values()).sort((a, b) => a.hour - b.hour);
+    };
+
+    if (range === 1 || range === 3) {
+      return new Response(JSON.stringify(mergeAll(ncstTimeline, ultraTimeline, shortTimeline)), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -192,13 +200,7 @@ Deno.serve(async (req) => {
       source: "openmeteo",
     }));
 
-    // range 5: 전체 병합
-    const byHour = new Map<number, ForecastHour>();
-    for (const r of [...ncstTimeline, ...ultraTimeline, ...shortTimeline, ...omTimeline]) {
-      byHour.set(r.hour, r);
-    }
-    const merged = Array.from(byHour.values()).sort((a, b) => a.hour - b.hour);
-    return new Response(JSON.stringify(merged), {
+    return new Response(JSON.stringify(mergeAll(ncstTimeline, ultraTimeline, shortTimeline, omTimeline)), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
