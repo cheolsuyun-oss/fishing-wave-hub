@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { Navigation } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { windColor, WIND_COLORS, SUN_BAND_COLORS, TIMELINE_COLORS } from "@/lib/chart-colors";
+import { windColor, SUN_BAND_COLORS, TIMELINE_COLORS } from "@/lib/chart-colors";
 import { getSunInfo } from "@/lib/sun.functions";
 import { buildSunBands, bandFill, bandOpacity } from "@/lib/sun-bands";
 import { getVillageForecastTimeline, getVillageForecast, getOpenMeteoTimeline, type VillageForecastHour } from "@/lib/forecast.functions";
@@ -20,38 +20,36 @@ import { useQuery } from "@tanstack/react-query";
 import { getPoint } from "@/lib/points";
 import { getCustomPointsSync } from "@/lib/custom-points-store";
 import { supabase } from "@/lib/supabase";
-import { nearestStationCodeByGrid } from "@/lib/geo";
 
 type Range = 1 | 3 | 5;
-
-const ZONE_COLORS = {
-  past: "hsl(0 0% 15%)",
-  near: "hsl(217 91% 45%)",
-  far: "hsl(199 80% 65%)",
-} as const;
 
 const LINE_COLOR = "hsl(0 0% 70%)";
 
 const ARROW_PATH =
   "M10,0.15 L-0.14,-5.06 L1.45,-0.94 L-10,-2.34 L-6.99,0.23 L-9.83,3.21 L1.53,1.14 L-0.18,5.06 Z";
 
-const NEAR_ARROW_FILL = "hsl(217 80% 55%)";
-const NEAR_ARROW_STROKE = "hsl(217 90% 30%)";
+// zone별 화살표 색상
+const ZONE_ARROW = {
+  ncst:     { fill: "hsl(0 0% 20%)",    stroke: "hsl(0 0% 10%)" },
+  ultra:    { fill: "hsl(217 80% 55%)", stroke: "hsl(217 90% 30%)" },
+  short:    { fill: "hsl(199 80% 65%)", stroke: "hsl(199 85% 38%)" },
+  openmeteo:{ fill: "hsl(199 80% 65%)", stroke: "hsl(199 85% 38%)" },
+} as const;
 
-const FAR_ARROW_FILL = "hsl(199 80% 65%)";
-const FAR_ARROW_STROKE = "hsl(199 85% 38%)";
+// 범례용 색상
+const LEGEND_COLORS = {
+  past:  "hsl(0 0% 15%)",
+  near:  "hsl(217 91% 45%)",
+  far:   "hsl(199 80% 65%)",
+} as const;
 
 interface ChartPoint {
   t: number;
-  hourOfDay: number;
   speed: number;
-  speedPast: number | null;
-  speedNear: number | null;
-  speedFar: number | null;
   gust: number;
   dir: number;
   dirLabel: string;
-  source: "ultra" | "short" | "extended" | "openmeteo";
+  source: "ncst" | "ultra" | "short" | "openmeteo";
 }
 
 function degToLabel(deg: number): string {
@@ -59,40 +57,20 @@ function degToLabel(deg: number): string {
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
-function buildData(timeline: VillageForecastHour[], nowT: number): ChartPoint[] {
-  const filtered = timeline.filter((h) => h.wsd != null);
-
-  const zoneOf = (t: number): "past" | "near" | "far" => {
-    if (t < nowT) return "past";
-    if (t < nowT + 6) return "near";
-    return "far";
-  };
-
-  const zones = filtered.map((h) => zoneOf(h.hour));
-
-  return filtered.map((h, i) => {
-    const speed = h.wsd ?? 0;
-    const zone = zones[i];
-    const prevZone = i > 0 ? zones[i - 1] : zone;
-    const nextZone = i < zones.length - 1 ? zones[i + 1] : zone;
-
-    const inPast = zone === "past" || (zone === "near" && prevZone === "past");
-    const inNear = zone === "near" || (zone === "past" && nextZone === "near") || (zone === "far" && prevZone === "near");
-    const inFar = zone === "far" || (zone === "near" && nextZone === "far");
-
-    return {
-      t: h.hour,
-      hourOfDay: h.hour % 24,
-      speed,
-      speedPast: inPast ? speed : null,
-      speedNear: inNear ? speed : null,
-      speedFar: inFar ? speed : null,
-      gust: Math.round((speed * 1.3) * 10) / 10,
-      dir: h.vec ?? 0,
-      dirLabel: degToLabel(h.vec ?? 0),
-      source: h.source,
-    };
-  });
+function buildData(timeline: VillageForecastHour[]): ChartPoint[] {
+  return timeline
+    .filter((h) => h.wsd != null)
+    .map((h) => {
+      const speed = h.wsd ?? 0;
+      return {
+        t: h.hour,
+        speed,
+        gust: Math.round(speed * 1.3 * 10) / 10,
+        dir: h.vec ?? 0,
+        dirLabel: degToLabel(h.vec ?? 0),
+        source: h.source,
+      };
+    });
 }
 
 function nowHour(): number {
@@ -111,40 +89,33 @@ async function traceClientRender(stationCode: string, windSpeed: number | null) 
       note: "screen render",
     });
   } catch {
-    // ignore trace failure
+    // ignore
   }
 }
 
 function WindPropeller({ speed }: { speed: number }) {
   const duration =
     speed <= 0.5 ? 6 :
-    speed <= 2 ? 4 :
-    speed <= 5 ? 2 :
-    speed <= 10 ? 1 :
-    0.4;
+    speed <= 2   ? 4 :
+    speed <= 5   ? 2 :
+    speed <= 10  ? 1 : 0.4;
 
   const bladeFill =
     speed <= 5.6 ? "hsl(199 80% 75%)" :
-    speed <= 10  ? "hsl(25 90% 70%)" :
-                   "hsl(0 80% 72%)";
+    speed <= 10  ? "hsl(25 90% 70%)"  : "hsl(0 80% 72%)";
   const bladeStroke =
     speed <= 5.6 ? "hsl(199 70% 58%)" :
-    speed <= 10  ? "hsl(25 80% 55%)" :
-                   "hsl(0 70% 58%)";
+    speed <= 10  ? "hsl(25 80% 55%)"  : "hsl(0 70% 58%)";
   const hubFill =
     speed <= 5.6 ? "hsl(199 75% 68%)" :
-    speed <= 10  ? "hsl(25 85% 62%)" :
-                   "hsl(0 75% 62%)";
+    speed <= 10  ? "hsl(25 85% 62%)"  : "hsl(0 75% 62%)";
   const hubInner =
     speed <= 5.6 ? "hsl(199 70% 55%)" :
-    speed <= 10  ? "hsl(25 80% 50%)" :
-                   "hsl(0 70% 50%)";
+    speed <= 10  ? "hsl(25 80% 50%)"  : "hsl(0 70% 50%)";
 
   return (
     <svg
-      width="38"
-      height="38"
-      viewBox="0 0 38 38"
+      width="38" height="38" viewBox="0 0 38 38"
       style={{ animation: `windSpin ${duration}s linear infinite`, flexShrink: 0 }}
     >
       <style>{`@keyframes windSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -152,9 +123,7 @@ function WindPropeller({ speed }: { speed: number }) {
         <g key={deg} transform={`rotate(${deg} 19 19)`}>
           <path
             d="M19,19 C16,16 15,10 17,4 C18,1 20,1 21,4 C23,10 22,16 19,19 Z"
-            fill={bladeFill}
-            stroke={bladeStroke}
-            strokeWidth="0.5"
+            fill={bladeFill} stroke={bladeStroke} strokeWidth="0.5"
           />
         </g>
       ))}
@@ -222,9 +191,8 @@ export default function WindChart({ pointId }: { pointId: string }) {
     const mergedTimeline = range === 5
       ? [...timeline, ...openMeteoTimeline.filter((r) => !timeline.some((t) => t.hour === r.hour))]
       : timeline;
-    const built = buildData(mergedTimeline, currentNow);
-    return built.filter((d) => d.t < range * 24);
-  }, [timeline, openMeteoTimeline, range, currentNow]);
+    return buildData(mergedTimeline).filter((d) => d.t < range * 24);
+  }, [timeline, openMeteoTimeline, range]);
 
   useEffect(() => {
     if (point) getSunInfo(point.lat, point.lng).then(setSunInfo);
@@ -253,12 +221,11 @@ export default function WindChart({ pointId }: { pointId: string }) {
     }
     return {
       t: currentNow,
-      hourOfDay: Math.floor(currentNow),
       speed: currentFcst.wsd,
-      gust: Math.round((currentFcst.wsd * 1.3) * 10) / 10,
+      gust: Math.round(currentFcst.wsd * 1.3 * 10) / 10,
       dir: currentFcst.vec ?? 0,
       dirLabel: degToLabel(currentFcst.vec ?? 0),
-      source: "ultra" as const,
+      source: "ncst" as const,
     };
   }, [isDragging, currentFcst, data, activeT, currentNow]);
 
@@ -286,27 +253,22 @@ export default function WindChart({ pointId }: { pointId: string }) {
   const activeMin = Math.round((activeT - activeHourInt) * 60);
   const activeTimeStr = `${String(activeHourInt).padStart(2, "0")}:${String(activeMin).padStart(2, "0")}`;
 
-  const renderDot = (props: unknown, zoneKey: "speedPast" | "speedNear" | "speedFar", color: string) => {
+  const renderDot = (props: unknown) => {
     const { cx, cy, payload, index } = props as {
       cx: number; cy: number; payload: ChartPoint; index: number;
     };
     if (index % arrowEvery !== 0) return <g key={index} />;
-    if (!payload[zoneKey]) return <g key={index} />;
-    if (payload.source === "extended") return <g key={index} />;
+    if (!payload.speed) return <g key={index} />;
 
-    const isNear = zoneKey === "speedNear";
-    const isFar = zoneKey === "speedFar";
-    const fill = isNear ? NEAR_ARROW_FILL : isFar ? FAR_ARROW_FILL : color;
-    const stroke = isNear ? NEAR_ARROW_STROKE : isFar ? FAR_ARROW_STROKE : color;
-    const strokeWidth = isNear || isFar ? 0.5 : 0.8;
+    const colors = ZONE_ARROW[payload.source] ?? ZONE_ARROW.short;
 
     return (
       <g key={index} transform={`translate(${cx}, ${cy}) rotate(${payload.dir + 180}) scale(0.7)`}>
         <path
           d={ARROW_PATH}
-          fill={fill}
-          stroke={stroke}
-          strokeWidth={strokeWidth}
+          fill={colors.fill}
+          stroke={colors.stroke}
+          strokeWidth={0.5}
           strokeLinejoin="round"
         />
       </g>
@@ -323,9 +285,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
               key={r}
               onClick={() => setRange(r)}
               className={`px-3 py-1 rounded-full font-medium transition ${
-                r === range
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground"
+                r === range ? "bg-primary text-primary-foreground" : "text-muted-foreground"
               }`}
             >
               {r}일
@@ -337,9 +297,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
       {activePoint && (
         <div className="flex items-center gap-2 mb-1">
           <WindPropeller speed={activePoint.speed} />
-          <span className="text-3xl font-bold text-foreground leading-none">
-            {activePoint.speed}
-          </span>
+          <span className="text-3xl font-bold text-foreground leading-none">{activePoint.speed}</span>
           <span className="text-sm text-muted-foreground">m/s</span>
           <span
             className="inline-flex items-center gap-1 text-sm font-semibold"
@@ -418,8 +376,7 @@ export default function WindChart({ pointId }: { pointId: string }) {
               label={(props: { viewBox?: { x?: number; y?: number } }) => {
                 const x = props.viewBox?.x ?? 0;
                 const y = (props.viewBox?.y ?? 0) + 8;
-                const w = 44;
-                const h = 18;
+                const w = 44; const h = 18;
                 return (
                   <g>
                     <rect x={x - w / 2} y={y} width={w} height={h} rx={9} ry={9} fill={TIMELINE_COLORS.active} />
@@ -454,45 +411,24 @@ export default function WindChart({ pointId }: { pointId: string }) {
               domain={[0, "dataMax + 3"]}
             />
             <Tooltip content={() => null} isAnimationActive={false} cursor={false} />
-
             <Line
               type="monotone"
-              dataKey="speedPast"
+              dataKey="speed"
               stroke={LINE_COLOR}
               strokeWidth={0.75}
               isAnimationActive={false}
               activeDot={false}
               connectNulls={false}
-              dot={(props) => renderDot(props, "speedPast", ZONE_COLORS.past)}
-            />
-            <Line
-              type="monotone"
-              dataKey="speedNear"
-              stroke={LINE_COLOR}
-              strokeWidth={0.75}
-              isAnimationActive={false}
-              activeDot={false}
-              connectNulls={false}
-              dot={(props) => renderDot(props, "speedNear", ZONE_COLORS.near)}
-            />
-            <Line
-              type="monotone"
-              dataKey="speedFar"
-              stroke={LINE_COLOR}
-              strokeWidth={0.75}
-              isAnimationActive={false}
-              activeDot={false}
-              connectNulls={false}
-              dot={(props) => renderDot(props, "speedFar", ZONE_COLORS.far)}
+              dot={renderDot}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground flex-wrap">
-        <LegendDot color={ZONE_COLORS.past} label="과거~현재" />
-        <LegendDot color={ZONE_COLORS.near} label="현재~+6시간" />
-        <LegendDot color={ZONE_COLORS.far} label="그 이후" />
+        <LegendDot color={LEGEND_COLORS.past}  label="과거~현재" />
+        <LegendDot color={LEGEND_COLORS.near}  label="현재~+6시간" />
+        <LegendDot color={LEGEND_COLORS.far}   label="그 이후" />
         <span className="flex items-center gap-1">
           <span className="flex overflow-hidden rounded" style={{ width: "24px", height: "12px" }}>
             <span className="flex-1" style={{ background: `${SUN_BAND_COLORS.dawn}80` }} />

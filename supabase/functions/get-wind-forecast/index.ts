@@ -8,12 +8,12 @@ function kstNow() {
   return new Date(Date.now() + 9 * 3600_000);
 }
 
-function kstYMD(d: Date): string {
-  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-
 function kstDateStr(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function kstYMD(d: Date): string {
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 type ForecastHour = {
@@ -23,56 +23,31 @@ type ForecastHour = {
   tmp: number | null;
   pop: number | null;
   wav: number | null;
-  source: "ultra" | "short" | "extended" | "openmeteo";
+  source: "ncst" | "ultra" | "short" | "openmeteo";
 };
 
-function rowToHour(
-  forecastDt: string,
-  todayStr: string,
-  fields: { wsd?: string | number | null; vec?: string | number | null; tmp?: string | number | null; pop?: string | number | null; wav?: string | number | null },
-  source: ForecastHour["source"]
-): ForecastHour {
+function toNum(v: string | number | null | undefined): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function dtToHour(forecastDt: string, todayStr: string): number {
   const utcMs = new Date(forecastDt).getTime();
   const kstMs = utcMs + 9 * 3600_000;
   const kstDate = new Date(kstMs);
   const hourOfDay = kstDate.getUTCHours();
-  const fcstDateCompact = kstYMD(kstDate);
+  const fcstYMD = kstYMD(kstDate);
 
   const todayY = parseInt(todayStr.slice(0, 4));
   const todayM = parseInt(todayStr.slice(5, 7)) - 1;
   const todayD = parseInt(todayStr.slice(8, 10));
-  const kstY = parseInt(fcstDateCompact.slice(0, 4));
-  const kstM = parseInt(fcstDateCompact.slice(4, 6)) - 1;
-  const kstD = parseInt(fcstDateCompact.slice(6, 8));
+  const kstY = parseInt(fcstYMD.slice(0, 4));
+  const kstM = parseInt(fcstYMD.slice(4, 6)) - 1;
+  const kstD = parseInt(fcstYMD.slice(6, 8));
   const dayDiff = Math.round(
     (Date.UTC(kstY, kstM, kstD) - Date.UTC(todayY, todayM, todayD)) / 86400000
   );
-  const hour = dayDiff * 24 + hourOfDay;
-
-  const toNum = (v: string | number | null | undefined) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-
-  return {
-    hour,
-    wsd: toNum(fields.wsd),
-    vec: toNum(fields.vec),
-    tmp: toNum(fields.tmp),
-    pop: toNum(fields.pop),
-    wav: toNum(fields.wav),
-    source,
-  };
-}
-
-function buildExtended(ultraRows: ForecastHour[], maxHour: number): ForecastHour[] {
-  if (!ultraRows.length) return [];
-  const last = ultraRows[ultraRows.length - 1];
-  const extended: ForecastHour[] = [];
-  for (let h = last.hour + 1; h < maxHour; h++) {
-    extended.push({ hour: h, wsd: last.wsd, vec: null, tmp: last.tmp, pop: null, wav: null, source: "extended" });
-  }
-  return extended;
+  return dayDiff * 24 + hourOfDay;
 }
 
 Deno.serve(async (req) => {
@@ -93,54 +68,79 @@ Deno.serve(async (req) => {
     const todayStr = kstDateStr(now);
     const nowUtc = new Date().toISOString();
 
-    // 1) forecasts_ultra (D0, ~+6h)
+    // ── 1) 과거~현재: forecasts_ncst (base_dt 기준) ───────────────
     const kstMidnightUtc = new Date(Date.now() + 9 * 3600_000);
-kstMidnightUtc.setUTCHours(0, 0, 0, 0);
-const ultraFrom = new Date(kstMidnightUtc.getTime() - 9 * 3600_000).toISOString();
-    const kstEndOfDay = new Date(Date.now() + 9 * 3600_000);
-kstEndOfDay.setUTCHours(23, 59, 59, 999);
-const ultraTo = new Date(kstEndOfDay.getTime() - 9 * 3600_000).toISOString();
-    const { data: ultraRows } = await supabase
-      .rpc("get_latest_ultra", {
-        p_station_code: station_code,
-        p_from: ultraFrom,
-        p_to: ultraTo,
-      });
+    kstMidnightUtc.setUTCHours(0, 0, 0, 0);
+    const ncstFrom = new Date(kstMidnightUtc.getTime() - 9 * 3600_000).toISOString();
 
-    const ultraTimeline: ForecastHour[] = (ultraRows ?? []).map((r) =>
-      rowToHour(r.forecast_dt, todayStr, { wsd: r.wsd, vec: r.vec, tmp: r.t1h }, "ultra")
-    );
+    const { data: ncstRows } = await supabase
+      .from("forecasts_ncst")
+      .select("base_dt, wsd, vec, t1h")
+      .eq("station_code", station_code)
+      .gte("base_dt", ncstFrom)
+      .lte("base_dt", nowUtc)
+      .order("base_dt", { ascending: true });
 
-    // range 1이면 ultra + short 당일분 병합 반환
-    if (range === 1) {
-      const shortFrom1 = new Date(Date.now() + 6 * 3600_000).toISOString();
-      const shortTo1 = new Date(kstEndOfDay.getTime() - 9 * 3600_000).toISOString();
-      const { data: shortRows1 } = await supabase
-        .from("forecasts_short")
-        .select("forecast_dt, wsd, vec, tmp, pop, wav")
+    // base_dt 중복 제거 (같은 시각 여러 row 있을 경우 마지막 1개)
+    const ncstByDt = new Map<string, typeof ncstRows[0]>();
+    for (const r of (ncstRows ?? [])) {
+      ncstByDt.set(r.base_dt, r);
+    }
+    const ncstTimeline: ForecastHour[] = Array.from(ncstByDt.values()).map((r) => ({
+      hour: dtToHour(r.base_dt, todayStr),
+      wsd: toNum(r.wsd),
+      vec: toNum(r.vec),
+      tmp: toNum(r.t1h),
+      pop: null,
+      wav: null,
+      source: "ncst",
+    }));
+
+    // ── 2) 현재~+6h: fcst_ultra 최신 base_dt 1회분 ───────────────
+    const { data: latestBaseRow } = await supabase
+      .from("fcst_ultra")
+      .select("base_dt")
+      .eq("station_code", station_code)
+      .order("base_dt", { ascending: false })
+      .limit(1)
+      .single();
+
+    const ultraTimeline: ForecastHour[] = [];
+    if (latestBaseRow) {
+      const { data: ultraRows } = await supabase
+        .from("fcst_ultra")
+        .select("forecast_dt, wsd, vec, t1h")
         .eq("station_code", station_code)
-        .gte("forecast_dt", shortFrom1)
-        .lte("forecast_dt", shortTo1)
-        .order("forecast_dt", { ascending: true })
-        .limit(24);
+        .eq("base_dt", latestBaseRow.base_dt)
+        .gte("forecast_dt", new Date(Math.floor(Date.now() / 3600_000) * 3600_000).toISOString())
+        .order("forecast_dt", { ascending: true });
 
-      const shortTimeline1: ForecastHour[] = (shortRows1 ?? []).map((r) =>
-        rowToHour(r.forecast_dt, todayStr, { wsd: r.wsd, vec: r.vec, tmp: r.tmp, pop: r.pop, wav: r.wav }, "short")
-      );
+      for (const r of (ultraRows ?? [])) {
+        ultraTimeline.push({
+          hour: dtToHour(r.forecast_dt, todayStr),
+          wsd: toNum(r.wsd),
+          vec: toNum(r.vec),
+          tmp: toNum(r.t1h),
+          pop: null,
+          wav: null,
+          source: "ultra",
+        });
+      }
+    }
 
-      const ultraByHour1 = new Map(ultraTimeline.map((r) => [r.hour, r]));
-      const shortByHour1 = new Map(shortTimeline1.map((r) => [r.hour, r]));
-      const allHours1 = Array.from(new Set([...ultraByHour1.keys(), ...shortByHour1.keys()])).sort((a, b) => a - b);
-      const merged1 = allHours1.map((h) => ultraByHour1.get(h) ?? shortByHour1.get(h)!);
-
-      return new Response(JSON.stringify(merged1), {
+    // range 1이면 ncst + ultra만 반환
+    if (range === 1) {
+      const byHour = new Map<number, ForecastHour>();
+      for (const r of [...ncstTimeline, ...ultraTimeline]) byHour.set(r.hour, r);
+      const merged = Array.from(byHour.values()).sort((a, b) => a.hour - b.hour);
+      return new Response(JSON.stringify(merged), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 2) forecasts_short (D1~D2, +6h~+72h)
-    const shortFrom = new Date(Date.now() + 6 * 3600_000).toISOString();
-    const shortTo = new Date(Date.now() + 72 * 3600_000).toISOString();
+    // ── 3) +7h~+72h: forecasts_short ─────────────────────────────
+    const shortFrom = new Date(Date.now() + 7 * 3600_000).toISOString();
+    const shortTo   = new Date(Date.now() + 72 * 3600_000).toISOString();
     const { data: shortRows } = await supabase
       .from("forecasts_short")
       .select("forecast_dt, wsd, vec, tmp, pop, wav")
@@ -150,28 +150,29 @@ const ultraTo = new Date(kstEndOfDay.getTime() - 9 * 3600_000).toISOString();
       .order("forecast_dt", { ascending: true })
       .limit(72);
 
-    const shortTimeline: ForecastHour[] = (shortRows ?? []).map((r) =>
-      rowToHour(r.forecast_dt, todayStr, { wsd: r.wsd, vec: r.vec, tmp: r.tmp, pop: r.pop, wav: r.wav }, "short")
-    );
+    const shortTimeline: ForecastHour[] = (shortRows ?? []).map((r) => ({
+      hour: dtToHour(r.forecast_dt, todayStr),
+      wsd: toNum(r.wsd),
+      vec: toNum(r.vec),
+      tmp: toNum(r.tmp),
+      pop: toNum(r.pop),
+      wav: toNum(r.wav),
+      source: "short",
+    }));
 
-    const farTimeline = shortTimeline.length > 0
-      ? shortTimeline
-      : buildExtended(ultraTimeline, 72);
-
-    // range 3이면 ultra + short 병합 반환
+    // range 3이면 ncst + ultra + short 반환
     if (range === 3) {
-      const ultraByHour = new Map(ultraTimeline.map((r) => [r.hour, r]));
-      const farByHour = new Map(farTimeline.map((r) => [r.hour, r]));
-      const allHours = Array.from(new Set([...ultraByHour.keys(), ...farByHour.keys()])).sort((a, b) => a - b);
-      const merged = allHours.map((h) => ultraByHour.get(h) ?? farByHour.get(h)!);
+      const byHour = new Map<number, ForecastHour>();
+      for (const r of [...ncstTimeline, ...ultraTimeline, ...shortTimeline]) byHour.set(r.hour, r);
+      const merged = Array.from(byHour.values()).sort((a, b) => a.hour - b.hour);
       return new Response(JSON.stringify(merged), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 3) forecasts_openmeteo (D3~D5, +73h~+121h)
+    // ── 4) +73h~: forecasts_openmeteo ────────────────────────────
     const omFrom = new Date(Date.now() + 73 * 3600_000).toISOString();
-    const omTo = new Date(Date.now() + 121 * 3600_000).toISOString();
+    const omTo   = new Date(Date.now() + 121 * 3600_000).toISOString();
     const { data: omRows } = await supabase
       .from("forecasts_openmeteo")
       .select("forecast_dt, wsd, vec")
@@ -181,19 +182,22 @@ const ultraTo = new Date(kstEndOfDay.getTime() - 9 * 3600_000).toISOString();
       .order("forecast_dt", { ascending: true })
       .limit(48);
 
-    const omTimeline: ForecastHour[] = (omRows ?? []).map((r) =>
-      rowToHour(r.forecast_dt, todayStr, { wsd: r.wsd, vec: r.vec }, "openmeteo")
-    );
+    const omTimeline: ForecastHour[] = (omRows ?? []).map((r) => ({
+      hour: dtToHour(r.forecast_dt, todayStr),
+      wsd: toNum(r.wsd),
+      vec: toNum(r.vec),
+      tmp: null,
+      pop: null,
+      wav: null,
+      source: "openmeteo",
+    }));
 
-    // ultra + short + openmeteo 병합
-    const ultraByHour = new Map(ultraTimeline.map((r) => [r.hour, r]));
-    const farByHour = new Map(farTimeline.map((r) => [r.hour, r]));
-    const omByHour = new Map(omTimeline.map((r) => [r.hour, r]));
-    const allHours = Array.from(
-      new Set([...ultraByHour.keys(), ...farByHour.keys(), ...omByHour.keys()])
-    ).sort((a, b) => a - b);
-    const merged = allHours.map((h) => ultraByHour.get(h) ?? farByHour.get(h) ?? omByHour.get(h)!);
-
+    // range 5: 전체 병합
+    const byHour = new Map<number, ForecastHour>();
+    for (const r of [...ncstTimeline, ...ultraTimeline, ...shortTimeline, ...omTimeline]) {
+      byHour.set(r.hour, r);
+    }
+    const merged = Array.from(byHour.values()).sort((a, b) => a.hour - b.hour);
     return new Response(JSON.stringify(merged), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

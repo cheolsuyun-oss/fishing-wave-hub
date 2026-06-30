@@ -24,7 +24,7 @@ export type VillageForecastHour = {
   vec: number | null;
   pop: number | null;
   wav: number | null;
-  source: "ultra" | "short" | "extended" | "openmeteo";
+  source: "ncst" | "ultra" | "short" | "openmeteo";
 };
 
 type FcstItem = {
@@ -326,7 +326,7 @@ type WindForecastHour = {
   tmp: number | null;
   pop: number | null;
   wav: number | null;
-  source: "ultra" | "short" | "extended" | "openmeteo";
+  source: "ncst" | "ultra" | "short" | "openmeteo";
 };
 
 export async function getVillageForecastTimeline(data: {
